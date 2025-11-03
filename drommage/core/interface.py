@@ -56,6 +56,7 @@ class DocTUIView:
         self.selected_region = None
         self.mode = "view"  # view, region_detail, llm_detail, queue
         self.right_scroll = 0
+        self.commit_scroll = 0  # Horizontal scroll for commit list
         self.status = ""
         self.current_analyses = {"brief": None, "deep": None}  # Separate analyses
         self.active_tasks = []  # Track running analysis tasks
@@ -384,7 +385,7 @@ class DocTUIView:
             # Word wrap summary  
             summary_lines = self._word_wrap(current_analysis.summary, w - 2)
             # Use all available space for summary
-            available_lines = h - y - 5  # Reserve some space for details/hints
+            available_lines = max(3, h - y - 5)  # At least 3 lines, reserve space for details/hints
             for line in summary_lines[:available_lines]:
                 if y >= h - 3:  # Safety check
                     break
@@ -440,7 +441,7 @@ class DocTUIView:
             y += 1
             summary_lines = self._word_wrap(deep_analysis.summary, w - 2)
             # Use more space for deep summary
-            available_lines = h - y - 8  # Reserve space for details/risks/recommendations
+            available_lines = max(3, h - y - 8)  # At least 3 lines, reserve space for details/risks/recommendations
             for line in summary_lines[:available_lines]:
                 if y >= h - 6:  # Safety check
                     break
@@ -518,8 +519,19 @@ class DocTUIView:
                 scr.addstr(y, x, "Diff:", curses.A_BOLD)
                 y += 1
                 
-                # Show diff lines (simplified)
-                diff_lines = diff.diff_text.split('\n')[self.right_scroll:self.right_scroll + h - y - 2]
+                # Show diff lines with word wrap
+                raw_diff_lines = diff.diff_text.split('\n')
+                wrapped_diff_lines = []
+                for line in raw_diff_lines:
+                    if len(line) <= w - 4:
+                        wrapped_diff_lines.append(line)
+                    else:
+                        # Wrap long lines
+                        wrapped = self._word_wrap(line, w - 4)
+                        wrapped_diff_lines.extend(wrapped)
+                
+                # Apply vertical scrolling
+                diff_lines = wrapped_diff_lines[self.right_scroll:self.right_scroll + h - y - 2]
                 
                 for i, line in enumerate(diff_lines):
                     if y + i >= h - 2:
