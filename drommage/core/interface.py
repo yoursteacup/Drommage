@@ -240,34 +240,33 @@ class DocTUIView:
             brief_status = analysis_status.get("brief")
             deep_status = analysis_status.get("deep")
             
-            # Only show D indicator when there's analysis or it's in progress
-            d_indicator = ""
+            # Show both brief (d) and deep (D) indicators when available
+            brief_indicator = ""
+            deep_indicator = ""
+            
+            if brief_status:
+                # Brief analysis - use lowercase d
+                brief_indicator = self._get_status_indicator(brief_status, "d")
+            
             if deep_status:
-                # Deep analysis exists or in progress - show status with type
-                if deep_status in ["pending", "running"]:
-                    d_indicator = self._get_status_indicator(deep_status, "D⚡")  # Deep in progress
-                else:
-                    d_indicator = self._get_status_indicator(deep_status, "D")
-            elif brief_status:
-                # Brief analysis exists or in progress - show status with type
-                if brief_status in ["pending", "running"]:
-                    d_indicator = self._get_status_indicator(brief_status, "D📝")  # Brief in progress
-                else:
-                    d_indicator = self._get_status_indicator(brief_status, "D")
-            # No indicator if no analysis at all
+                # Deep analysis - use uppercase D  
+                deep_indicator = self._get_status_indicator(deep_status, "D")
+            
+            # Combine indicators
+            indicators = brief_indicator + deep_indicator
             
             # Format line 
             base_line = f"{prefix} {icon} {commit.short_hash} {commit.message}"
             
-            if d_indicator:
-                # Fit to width with D indicator aligned right
-                max_msg_len = w - len(d_indicator) - 3
+            if indicators:
+                # Fit to width with indicators aligned right
+                max_msg_len = w - len(indicators) - 3
                 if len(base_line) > max_msg_len:
                     base_line = base_line[:max_msg_len-1] + "…"
-                # Pad and add indicator
-                line = base_line.ljust(w - len(d_indicator) - 1) + d_indicator
+                # Pad and add indicators
+                line = base_line.ljust(w - len(indicators) - 1) + indicators
             else:
-                # No indicator - just the commit line
+                # No indicators - just the commit line
                 line = base_line[:w-2]
             
             try:
