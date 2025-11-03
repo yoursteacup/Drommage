@@ -435,7 +435,7 @@ class DocTUIView:
             scr.addstr(y, x, "📋 Summary:", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
             y += 1
             summary_lines = self._word_wrap(deep_analysis.summary, w - 2)
-            for line in summary_lines[:3]:
+            for line in summary_lines[:8]:  # Больше строк для deep summary
                 scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["llm_summary"]))
                 y += 1
             y += 1
