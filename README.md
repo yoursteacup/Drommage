@@ -55,7 +55,7 @@ python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 # Run DRommage
-python main_v8.py
+python drommage.py
 ```
 
 ## 🎮 Usage
@@ -88,21 +88,27 @@ Comprehensive analysis including:
 
 ```
 DRommage/
-├── core/
-│   ├── git_engine.py      # Git-style region tracking
-│   ├── llm_analyzer.py    # LLM integration & analysis
-│   ├── region_index.py    # Region volatility tracking
-│   └── tui_v8.py          # Terminal UI implementation
-├── test_docs/             # Sample documents
-└── main_v8.py            # Entry point
+├── README.md           # Comprehensive documentation
+├── drommage.py        # Main entry point
+├── requirements.txt   # Dependencies (none!)
+├── drommage/          # Core package
+│   ├── __init__.py
+│   └── core/
+│       ├── diff_tracker.py    # Git-style region tracking
+│       ├── llm_analyzer.py    # LLM integration & analysis
+│       ├── region_analyzer.py # Region volatility tracking
+│       └── interface.py       # Terminal UI implementation
+├── test_docs/         # Sample documents
+├── test_scripts/      # Helper scripts
+└── old_refs/          # Version history
 ```
 
 ### Core Components
 
-1. **GitDiffEngine**: Tracks document regions through versions using semantic hashing
-2. **LLMAnalyzer**: Interfaces with Ollama for intelligent analysis
-3. **RegionIndex**: Identifies volatile vs stable document sections
-4. **DocTUIView**: Beautiful terminal interface with real-time updates
+1. **DiffTracker**: Tracks document regions through versions using semantic hashing
+2. **LLMAnalyzer**: Interfaces with Ollama for intelligent analysis  
+3. **RegionAnalyzer**: Identifies volatile vs stable document sections
+4. **Interface**: Beautiful terminal interface with real-time updates
 
 ## 🔬 How It Works
 

@@ -4,7 +4,7 @@ Region index - tracks semantic regions and their evolution through versions
 
 from typing import List, Dict, Optional
 from dataclasses import dataclass
-from core.git_engine import GitDiffEngine, Region
+from .diff_tracker import GitDiffEngine, Region
 
 @dataclass  
 class RegionSummary:

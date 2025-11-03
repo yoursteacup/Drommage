@@ -6,9 +6,9 @@ Improved visuals with Unicode box drawing and better color scheme
 import curses
 from typing import List, Optional
 from pathlib import Path
-from core.git_engine import GitDiffEngine
-from core.region_index import RegionIndex
-from core.llm_analyzer import LLMAnalyzer, AnalysisLevel, DiffAnalysis, ChangeType
+from .diff_tracker import GitDiffEngine
+from .region_analyzer import RegionIndex
+from .llm_analyzer import LLMAnalyzer, AnalysisLevel, DiffAnalysis, ChangeType
 
 # Enhanced color palette
 PALETTE = {

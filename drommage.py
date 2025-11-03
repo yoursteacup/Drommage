@@ -5,9 +5,9 @@ Now with intelligent diff interpretation and enhanced UI
 """
 
 from pathlib import Path
-from core.git_engine import GitDiffEngine
-from core.region_index import RegionIndex
-from core.tui_v8 import DocTUIView
+from drommage.core.diff_tracker import GitDiffEngine
+from drommage.core.region_analyzer import RegionIndex
+from drommage.core.interface import DocTUIView
 
 PROJECT_ROOT = Path(__file__).parent
 DOCS_DIR = PROJECT_ROOT / "test_docs" / "docs"
