@@ -98,6 +98,9 @@ class DocTUIView:
         if not any(self.current_analyses.values()):
             self.status = "Press B for brief or D for deep analysis"
         
+        # Set nodelay for non-blocking input and animation
+        scr.nodelay(True)
+        
         while True:
             # Update animation frame for visual feedback
             self.animation_frame = (self.animation_frame + 1) % 100
@@ -133,10 +136,18 @@ class DocTUIView:
             
             scr.refresh()
             
-            # Handle input
-            ch = scr.getch()
-            if not self._handle_input(ch):
-                break
+            # Handle input (non-blocking)
+            try:
+                ch = scr.getch()
+                if ch != -1:  # Key was pressed
+                    if not self._handle_input(ch):
+                        break
+            except:
+                pass
+            
+            # Small delay for animation
+            import time
+            time.sleep(0.1)
     
     def _draw_frame(self, scr, h, w, left_width, top_height):
         """Draw enhanced UI frame with Unicode box drawing"""
@@ -844,6 +855,21 @@ class DocTUIView:
         else:
             self.status = "No previous commit to compare"
             return
+        
+        # Check if analysis already exists or is in progress
+        cache_key = f"{prev_commit.hash}_{current_commit.hash}_{level.value}"
+        if cache_key in self.llm_cache:
+            self.status = f"📦 {level.value.title()} analysis already cached"
+            return
+        
+        # Check if already queued/running
+        context_pattern = f"{prev_commit.short_hash}→{current_commit.short_hash}"
+        for task in self.analysis_queue.tasks.values():
+            if (context_pattern in task.context and 
+                task.level == level and 
+                task.status.value in ["pending", "running"]):
+                self.status = f"🔄 {level.value.title()} analysis already {task.status.value}"
+                return
         
         # Get diff
         diff = self.git.get_commit_diff(prev_commit.hash, current_commit.hash)
