@@ -318,32 +318,36 @@ class DocTUIView:
             if deep_status:
                 # Deep analysis - use uppercase D  
                 deep_indicator = self._get_status_indicator(deep_status, "D")
-            elif i == self.selected_commit_idx and brief_status == "completed":
-                # Show default D button if brief is done but deep isn't
+            elif i == self.selected_commit_idx:
+                # Always show D button for selected commit (regardless of brief status)
                 deep_indicator = " D "
             
             # Combine indicators
             indicators = brief_indicator + deep_indicator
             
-            # Format full line first
-            full_line = f"{prefix} {icon} {commit.short_hash} {commit.message}"
+            # Calculate how much space we need for indicators
+            indicator_space = len(indicators) + 1 if indicators else 0
+            available_space = w - indicator_space - 2  # Reserve space for indicators + margin
             
-            # Add indicators to the full line
+            # Format base line and truncate if needed
+            base_line = f"{prefix} {icon} {commit.short_hash} {commit.message}"
+            if len(base_line) > available_space:
+                base_line = base_line[:available_space-1] + "…"
+            
+            # Combine base line with indicators
             if indicators:
-                full_line = full_line + " " + indicators
+                full_line = base_line.ljust(available_space) + " " + indicators
+            else:
+                full_line = base_line
             
-            # Apply horizontal scrolling to the complete line
+            # Apply horizontal scrolling (if needed)
             if self.commit_scroll > 0:
-                # Show scroll position indicator at start if scrolled
                 if len(full_line) > self.commit_scroll:
                     line = "←" + full_line[self.commit_scroll + 1:]
                 else:
                     line = "←"
             else:
                 line = full_line
-            
-            # Trim to fit width
-            line = line[:w-1]
             
             try:
                 scr.addnstr(y + i, x, line[:w], w, attr)
@@ -483,14 +487,7 @@ class DocTUIView:
         scr.addstr(y, x, "Summary:", curses.A_BOLD)
         y += 1
         
-        # Word wrap summary - DEBUG VERSION
-        with open("/tmp/drommage_debug.txt", "a") as f:
-            f.write(f"\n=== DISPLAY DEBUG ===\n")
-            f.write(f"current_analysis: {current_analysis}\n")
-            f.write(f"summary exists: {hasattr(current_analysis, 'summary')}\n")
-            f.write(f"summary value: {repr(getattr(current_analysis, 'summary', 'NO_ATTR'))}\n")
-            f.write(f"summary bool: {bool(getattr(current_analysis, 'summary', False))}\n")
-            f.write("=" * 25 + "\n")
+        # Word wrap summary
         
         if current_analysis.summary:
             summary_lines = self._word_wrap(current_analysis.summary, w - 2)
@@ -557,10 +554,8 @@ class DocTUIView:
             
             if deep_analysis.summary:
                 summary_lines = self._word_wrap(deep_analysis.summary, w - 2)
-                # Show significantly more lines for deep summary
-                for line in summary_lines[:20]:  # Show up to 20 lines for deep
-                    if y >= h - 1:  # Use almost all available space
-                        break
+                # Show summary lines without restrictive breaks (like brief analysis)
+                for line in summary_lines[:15]:  # Show up to 15 lines for deep
                     try:
                         scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["llm_summary"]))
                         y += 1
@@ -802,37 +797,23 @@ class DocTUIView:
         else:
             help_items = [("ESC", "back")]
         
-        # Only show progress messages in status bar, not completed results
-        if self.status and ("🔄" in self.status or "⏳" in self.status or "🤖" in self.status or "❌" in self.status):
-            # Show analysis progress prominently on the left
-            try:
-                scr.addstr(y, 2, self.status, curses.color_pair(PALETTE["llm_summary"]) | curses.A_BOLD)
-            except:
-                pass
-            
-            # Show minimal help on the right
-            short_help = "[Q] quit" if self.mode == "view" else "[ESC] back"
-            try:
-                scr.addstr(y, w - len(short_help) - 2, short_help, curses.color_pair(PALETTE["dim"]))
-            except:
-                pass
-        else:
-            # Normal help text
-            help_parts = []
-            for key, desc in help_items:
-                help_parts.append(f"[{key}] {desc}")
-            help_text = " │ ".join(help_parts)
-            
-            # Add status if present (non-analysis status) BUT NOT if it's already shown above
-            if self.status and not any(indicator in self.status for indicator in ["🔄", "⏳", "🤖", "❌"]):
-                help_text = f"{self.status} │ {help_text}"
-            
-            # Center and display
-            x = max(1, (w - len(help_text)) // 2)
-            try:
-                scr.addnstr(y, x, help_text[:w-2], w-2, curses.color_pair(PALETTE["dim"]))
-            except:
-                pass
+        # Status messages are no longer shown to avoid cluttering navigation
+        # Always show normal help text
+        help_parts = []
+        for key, desc in help_items:
+            help_parts.append(f"[{key}] {desc}")
+        help_text = " │ ".join(help_parts)
+        
+        # Add status if present (only basic status, no analysis messages)
+        if self.status and not any(indicator in self.status for indicator in ["🔄", "⏳", "🤖", "❌", "✅"]):
+            help_text = f"{self.status} │ {help_text}"
+        
+        # Center and display
+        x = max(1, (w - len(help_text)) // 2)
+        try:
+            scr.addnstr(y, x, help_text[:w-2], w-2, curses.color_pair(PALETTE["dim"]))
+        except:
+            pass
     
     def _handle_input(self, ch):
         """Handle keyboard input"""
@@ -936,7 +917,7 @@ class DocTUIView:
                 self._refresh_display(scr)
         
         # Analyze with LLM
-        self.status = "🤖 Starting analysis..."
+        # No status message to avoid cluttering navigation bar
         if scr:
             self._refresh_display(scr)
         
@@ -949,7 +930,7 @@ class DocTUIView:
         # Cache result
         self.llm_cache[cache_key] = analysis
         self.current_analysis = analysis
-        self.status = f"✅ Analysis complete ({level.value} level)"
+        # No completion status message to avoid cluttering navigation bar
         if scr:
             self._refresh_display(scr)
     
@@ -1087,18 +1068,7 @@ class DocTUIView:
         
         def on_complete(result: DiffAnalysis):
             try:
-                # DEBUG
-                with open("/tmp/drommage_debug.txt", "a") as f:
-                    f.write(f"\n=== CALLBACK DEBUG ===\n")
-                    f.write(f"Result summary: {repr(result.summary)}\n")
-                    f.write(f"Level: {level.value}\n")
-                    f.write(f"Selected idx: {self.selected_commit_idx}\n")
-                    f.write(f"Commits len: {len(self.commits)}\n")
-                    if self.selected_commit_idx < len(self.commits):
-                        f.write(f"Selected hash: {self.commits[self.selected_commit_idx].hash}\n")
-                        f.write(f"Current hash: {current_commit.hash}\n")
-                        f.write(f"Hash match: {self.commits[self.selected_commit_idx].hash == current_commit.hash}\n")
-                    f.write("=" * 30 + "\n")
+                # Store result and update cache
                 
                 # Cache first
                 cache_key = f"{prev_commit.hash}_{current_commit.hash}_{level.value}"

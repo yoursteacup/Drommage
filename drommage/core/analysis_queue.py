@@ -131,8 +131,9 @@ class AnalysisQueue:
                 
                 # Update status
                 task.status = TaskStatus.RUNNING
-                if task.status_callback:
-                    task.status_callback(f"🚀 Starting analysis: {task.context}")
+                # Don't send starting status to avoid cluttering navigation bar
+                # if task.status_callback:
+                #     task.status_callback(f"🚀 Starting analysis: {task.context}")
                 
                 try:
                     # Run the analysis

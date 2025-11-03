@@ -154,8 +154,9 @@ class LLMAnalyzer:
             
             elapsed = time.time() - start_time
             
-            if status_callback:
-                status_callback(f"✅ Analysis complete ({elapsed:.1f}s)")
+            # Don't send completion status to avoid cluttering navigation bar
+            # if status_callback:
+            #     status_callback(f"✅ Analysis complete ({elapsed:.1f}s)")
             
             if process.returncode == 0:
                 return stdout.strip()
@@ -287,8 +288,9 @@ Provide detailed analysis as JSON:
         
         if level == AnalysisLevel.BRIEF:
             # Simple one-line response
+            summary = response.strip() if response.strip() else f"Empty response (len={len(response)})"
             return DiffAnalysis(
-                summary=response[:80],
+                summary=summary,
                 change_type=ChangeType.MINOR,
                 impact_level="low",
                 confidence=0.8
@@ -355,7 +357,7 @@ Provide detailed analysis as JSON:
             except json.JSONDecodeError:
                 # Fallback for non-JSON response
                 # Try to extract meaningful info from text response
-                summary = response[:150] if response else "Analysis failed"
+                summary = response.strip() if response else "Analysis failed"  # Use full response
                 
                 # Try to detect change type from keywords
                 change_type = ChangeType.MINOR
