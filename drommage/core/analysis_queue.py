@@ -100,14 +100,18 @@ class AnalysisQueue:
                 pattern = f"{prev_short_hash}→{short_hash}"
                 if pattern in task.context:
                     level = task.level.value
-                    if level in ["brief", "deep"]:
-                        status[level] = task.status.value
+                    if level == "brief":
+                        status["brief"] = task.status.value
+                    elif level == "detailed":  # AnalysisLevel.DETAILED has value "detailed" not "deep"
+                        status["deep"] = task.status.value
             # Fallback to broader search if pattern not provided
             elif (commit_hash in task.context or 
                   (short_hash and short_hash in task.context)):
                 level = task.level.value
-                if level in ["brief", "deep"]:
-                    status[level] = task.status.value
+                if level == "brief":
+                    status["brief"] = task.status.value
+                elif level == "detailed":  # AnalysisLevel.DETAILED has value "detailed" not "deep"
+                    status["deep"] = task.status.value
         
         return status
     

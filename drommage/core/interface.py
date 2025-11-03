@@ -478,8 +478,6 @@ class DocTUIView:
             y += 2
             scr.addstr(y, x, "Press D to run deep analysis", curses.color_pair(PALETTE["dim"]))
         
-        # Back hint
-        scr.addstr(h - 2, x, "Press ESC to return", curses.color_pair(PALETTE["dim"]) | curses.A_ITALIC)
     
     def _draw_document_panel(self, scr, y, x, w, h):
         """Draw commit diff view"""
