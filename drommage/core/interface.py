@@ -384,10 +384,9 @@ class DocTUIView:
             
             # Word wrap summary  
             summary_lines = self._word_wrap(current_analysis.summary, w - 2)
-            # Use all available space for summary
-            available_lines = max(3, h - y - 5)  # At least 3 lines, reserve space for details/hints
-            for line in summary_lines[:available_lines]:
-                if y >= h - 3:  # Safety check
+            # Show at least 5 lines of summary
+            for line in summary_lines[:8]:  # Show up to 8 lines
+                if y >= h - 1:  # Only stop at very bottom
                     break
                 scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["llm_summary"]))
                 y += 1
@@ -440,10 +439,9 @@ class DocTUIView:
             scr.addstr(y, x, "📋 Summary:", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
             y += 1
             summary_lines = self._word_wrap(deep_analysis.summary, w - 2)
-            # Use more space for deep summary
-            available_lines = max(3, h - y - 8)  # At least 3 lines, reserve space for details/risks/recommendations
-            for line in summary_lines[:available_lines]:
-                if y >= h - 6:  # Safety check
+            # Show more lines for deep summary
+            for line in summary_lines[:12]:  # Show up to 12 lines for deep
+                if y >= h - 3:  # Reserve some space for details
                     break
                 scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["llm_summary"]))
                 y += 1
@@ -524,31 +522,35 @@ class DocTUIView:
                 wrapped_diff_lines = []
                 for line in raw_diff_lines:
                     if len(line) <= w - 4:
-                        wrapped_diff_lines.append(line)
+                        wrapped_diff_lines.append((line, line[0] if line else ' '))  # (text, prefix)
                     else:
-                        # Wrap long lines
+                        # Wrap long lines but preserve prefix for coloring
+                        prefix = line[0] if line else ' '
                         wrapped = self._word_wrap(line, w - 4)
-                        wrapped_diff_lines.extend(wrapped)
+                        for i, wrapped_line in enumerate(wrapped):
+                            # First line keeps original prefix, continuation lines get space
+                            line_prefix = prefix if i == 0 else ' '
+                            wrapped_diff_lines.append((wrapped_line, line_prefix))
                 
                 # Apply vertical scrolling
                 diff_lines = wrapped_diff_lines[self.right_scroll:self.right_scroll + h - y - 2]
                 
-                for i, line in enumerate(diff_lines):
+                for i, (line_text, line_prefix) in enumerate(diff_lines):
                     if y + i >= h - 2:
                         break
                         
-                    # Color diff lines
-                    if line.startswith('+'):
+                    # Color diff lines based on preserved prefix
+                    if line_prefix == '+':
                         attr = curses.color_pair(PALETTE["added"])
-                    elif line.startswith('-'):
+                    elif line_prefix == '-':
                         attr = curses.color_pair(PALETTE["removed"])
-                    elif line.startswith('@@'):
+                    elif line_prefix == '@':
                         attr = curses.color_pair(PALETTE["modified"])
                     else:
                         attr = curses.color_pair(PALETTE["dim"])
                     
                     try:
-                        scr.addnstr(y + i, x, line[:w], w, attr)
+                        scr.addnstr(y + i, x, line_text[:w], w, attr)
                     except:
                         pass
             else:
