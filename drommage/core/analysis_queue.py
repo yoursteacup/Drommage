@@ -90,12 +90,14 @@ class AnalysisQueue:
             if task.status in (TaskStatus.PENDING, TaskStatus.RUNNING)
         ]
     
-    def get_commit_analysis_status(self, commit_hash: str) -> dict:
+    def get_commit_analysis_status(self, commit_hash: str, short_hash: str = None) -> dict:
         """Get analysis status for a specific commit"""
         status = {"brief": None, "deep": None}
         
         for task in self.tasks.values():
-            if commit_hash in task.context:
+            # Check both full hash and short hash in context
+            if (commit_hash in task.context or 
+                (short_hash and short_hash in task.context)):
                 level = task.level.value
                 if level in ["brief", "deep"]:
                     status[level] = task.status.value

@@ -231,18 +231,24 @@ class DocTUIView:
                 icon = "📚"
             
             # Get analysis status for this commit  
-            analysis_status = self.analysis_queue.get_commit_analysis_status(commit.hash)
+            analysis_status = self.analysis_queue.get_commit_analysis_status(commit.hash, commit.short_hash)
             brief_status = analysis_status.get("brief")
             deep_status = analysis_status.get("deep")
             
             # Only show D indicator when there's analysis or it's in progress
             d_indicator = ""
             if deep_status:
-                # Deep analysis exists or in progress - show status
-                d_indicator = self._get_status_indicator(deep_status, "D")
+                # Deep analysis exists or in progress - show status with type
+                if deep_status in ["pending", "running"]:
+                    d_indicator = self._get_status_indicator(deep_status, "D⚡")  # Deep in progress
+                else:
+                    d_indicator = self._get_status_indicator(deep_status, "D")
             elif brief_status:
-                # Brief analysis exists or in progress - show status  
-                d_indicator = self._get_status_indicator(brief_status, "D")
+                # Brief analysis exists or in progress - show status with type
+                if brief_status in ["pending", "running"]:
+                    d_indicator = self._get_status_indicator(brief_status, "D📝")  # Brief in progress
+                else:
+                    d_indicator = self._get_status_indicator(brief_status, "D")
             # No indicator if no analysis at all
             
             # Format line 
@@ -371,9 +377,9 @@ class DocTUIView:
             scr.addstr(y, x, "Summary:", curses.A_BOLD)
             y += 1
             
-            # Word wrap summary
+            # Word wrap summary  
             summary_lines = self._word_wrap(current_analysis.summary, w - 2)
-            for line in summary_lines[:3]:
+            for line in summary_lines[:5]:  # Больше строк для summary
                 scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["llm_summary"]))
                 y += 1
             
@@ -932,3 +938,5 @@ class DocTUIView:
             else:
                 self.mode = "llm_detail"  # Switch to deep view  
                 self.status = "📊 Showing deep analysis"
+            # Force refresh of current analyses
+            self._load_cached_analyses()
