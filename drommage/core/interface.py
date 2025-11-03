@@ -9,6 +9,10 @@ from pathlib import Path
 from .diff_tracker import GitDiffEngine
 from .region_analyzer import RegionIndex
 from .llm_analyzer import LLMAnalyzer, AnalysisLevel, DiffAnalysis, ChangeType
+from .analysis_queue import AnalysisQueue, AnalysisTask, TaskStatus
+from .git_integration import GitIntegration, GitCommit
+import uuid
+import time
 
 # Enhanced color palette
 PALETTE = {
@@ -34,23 +38,27 @@ BOX = {
 }
 
 class DocTUIView:
-    def __init__(self, engine: GitDiffEngine, region_index: RegionIndex, history: List[dict]):
+    def __init__(self, engine: GitDiffEngine, region_index: RegionIndex, commits: List[GitCommit], git_integration: GitIntegration):
         self.engine = engine
         self.region_index = region_index
-        self.history = history
-        self.versions = [h["version"] for h in history]
+        self.commits = commits
+        self.git = git_integration
         
-        # Initialize LLM analyzer
+        # Initialize LLM analyzer and async queue
         self.llm = LLMAnalyzer(model="mistral:latest")
+        self.analysis_queue = AnalysisQueue(self.llm)
+        self.analysis_queue.start()
+        
         self.llm_cache = {}  # Cache for LLM analyses
         
         # UI state
-        self.selected_version_idx = len(self.versions) - 1
+        self.selected_commit_idx = 0 if commits else -1
         self.selected_region = None
-        self.mode = "view"  # view, region_detail, llm_detail
+        self.mode = "view"  # view, region_detail, llm_detail, queue
         self.right_scroll = 0
         self.status = ""
         self.current_analysis = None
+        self.active_tasks = []  # Track running analysis tasks
         
     def run(self):
         curses.wrapper(self._main)
@@ -171,33 +179,72 @@ class DocTUIView:
         scr.addstr(h - 2, w - 1, BOX["br"], curses.color_pair(PALETTE["border"]))
     
     def _draw_history_panel(self, scr, y, x, w, h):
-        """Draw version history with icons"""
-        scr.addstr(y, x, "📚 Version History", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
+        """Draw git commit history"""
+        if self.mode == "queue":
+            self._draw_queue_panel(scr, y, x, w, h)
+            return
+            
+        scr.addstr(y, x, "📚 Git Commits", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
+        y += 1
+        
+        # Show queue status
+        queue_size = self.analysis_queue.get_queue_size()
+        if queue_size > 0:
+            scr.addstr(y, x, f"🔄 Queue: {queue_size} tasks", curses.color_pair(PALETTE["modified"]))
+        else:
+            scr.addstr(y, x, "🔄 Queue: empty", curses.color_pair(PALETTE["dim"]))
         y += 2
         
-        for i, hist in enumerate(self.history[:h-2]):
-            if i == self.selected_version_idx:
+        for i, commit in enumerate(self.commits[:h-4]):
+            if i == self.selected_commit_idx:
                 attr = curses.color_pair(PALETTE["selected"])
                 prefix = "▶"
             else:
                 attr = curses.color_pair(PALETTE["dim"])
                 prefix = " "
             
-            # Version with icon based on title
-            icon = "📄"
-            if "stable" in hist['title'].lower():
-                icon = "✅"
-            elif "api" in hist['title'].lower():
-                icon = "🔌"
-            elif "refactor" in hist['title'].lower():
+            # Commit icon based on message
+            icon = "📝"
+            msg_lower = commit.message.lower()
+            if msg_lower.startswith("feat"):
+                icon = "🚀"
+            elif msg_lower.startswith("fix"):
+                icon = "🐛"
+            elif msg_lower.startswith("refactor"):
                 icon = "🔧"
+            elif msg_lower.startswith("docs"):
+                icon = "📚"
             
-            line = f"{prefix} {icon} {hist['version']} [{hist['date']}]"
+            line = f"{prefix} {icon} {commit.short_hash} {commit.message[:w-15]}"
             try:
                 scr.addnstr(y + i, x, line[:w], w, attr)
-                if len(line) < w - 2:
-                    scr.addnstr(y + i, x + len(line) + 1, hist['title'][:w - len(line) - 2], 
-                               w - len(line) - 2, attr)
+            except:
+                pass
+    
+    def _draw_queue_panel(self, scr, y, x, w, h):
+        """Draw analysis queue status"""
+        scr.addstr(y, x, "🔄 Analysis Queue", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
+        y += 2
+        
+        active_tasks = self.analysis_queue.get_active_tasks()
+        if not active_tasks:
+            scr.addstr(y, x, "No active tasks", curses.color_pair(PALETTE["dim"]))
+            return
+        
+        for i, task in enumerate(active_tasks[:h-3]):
+            status_icons = {
+                "pending": "⏳",
+                "running": "🔄",
+                "completed": "✅",
+                "failed": "❌"
+            }
+            
+            icon = status_icons.get(task["status"], "❓")
+            level_short = task["level"][0].upper()  # B/D/T
+            
+            line = f"{icon} {level_short} {task['context'][:w-8]}"
+            try:
+                scr.addnstr(y + i, x, line[:w], w, curses.color_pair(PALETTE["dim"]))
             except:
                 pass
     
@@ -479,10 +526,16 @@ class DocTUIView:
             help_items = [
                 ("↑↓", "navigate"),
                 ("B", "brief"),
-                ("D", "deep analysis"),
+                ("D", "deep analysis"), 
+                ("Q", "queue"),
                 ("R", "regions"),
                 ("PgUp/Dn", "scroll"),
-                ("Q", "quit")
+                ("Esc", "quit")
+            ]
+        elif self.mode == "queue":
+            help_items = [
+                ("ESC", "back"),
+                ("C", "clear completed")
             ]
         elif self.mode == "llm_detail":
             help_items = [
@@ -697,3 +750,55 @@ class DocTUIView:
             lines.append(" ".join(current_line))
         
         return lines
+    
+    def _queue_analysis(self, level: AnalysisLevel):
+        """Queue analysis task for current commit"""
+        if self.selected_commit_idx < 0 or self.selected_commit_idx >= len(self.commits):
+            return
+        
+        current_commit = self.commits[self.selected_commit_idx]
+        
+        # Get previous commit for diff
+        if self.selected_commit_idx < len(self.commits) - 1:
+            prev_commit = self.commits[self.selected_commit_idx + 1]
+        else:
+            self.status = "No previous commit to compare"
+            return
+        
+        # Get diff
+        diff = self.git.get_commit_diff(prev_commit.hash, current_commit.hash)
+        if not diff:
+            self.status = "Could not get commit diff"
+            return
+        
+        # Create task
+        task_id = str(uuid.uuid4())[:8]
+        context = f"{prev_commit.short_hash}→{current_commit.short_hash}: {current_commit.message[:30]}"
+        
+        def on_complete(result: DiffAnalysis):
+            # Update current analysis if this is for the selected commit
+            if self.selected_commit_idx < len(self.commits):
+                selected = self.commits[self.selected_commit_idx]
+                if selected.hash == current_commit.hash:
+                    self.current_analysis = result
+                    self.status = f"✅ Analysis complete: {level.value}"
+            
+            # Cache the result
+            cache_key = f"{prev_commit.hash}_{current_commit.hash}_{level.value}"
+            self.llm_cache[cache_key] = result
+        
+        def status_update(msg: str):
+            self.status = msg
+        
+        task = AnalysisTask(
+            id=task_id,
+            old_text="",  # We'll use the diff text directly
+            new_text=diff.diff_text,
+            context=context,
+            level=level,
+            callback=on_complete,
+            status_callback=status_update
+        )
+        
+        self.analysis_queue.add_task(task)
+        self.status = f"🔄 Queued {level.value} analysis: {context}"
