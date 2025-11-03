@@ -1,0 +1,15 @@
+# DRommage Data Service  
+
+## Overview
+Refactored documentation with cleaner structure.
+API examples have been streamlined.
+
+## Architecture
+The service uses a modular architecture with clear separation of concerns.
+Each module handles a specific aspect of data processing.
+
+## API Reference
+- GET /api/v1/status
+- POST /api/v1/sync
+- PUT /api/v1/data/{id}
+- DELETE /api/v1/data/{id}

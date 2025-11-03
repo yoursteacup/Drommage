@@ -1,0 +1,10 @@
+# API Documentation
+
+Added API examples section.
+
+## Authentication
+Use Bearer tokens.
+
+## Examples
+GET /users
+POST /transactions

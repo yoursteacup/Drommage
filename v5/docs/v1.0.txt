@@ -1,0 +1,16 @@
+# API Documentation
+
+Stable release version.
+Now includes detailed parameters and examples.
+
+## Authentication
+Use Bearer tokens.
+
+## Examples
+GET /users
+POST /transactions
+
+## Errors
+400 Bad Request
+401 Unauthorized
+500 Internal Server Error

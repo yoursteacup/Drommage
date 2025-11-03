@@ -1,0 +1,21 @@
+# DRommage Data Service
+
+## Overview
+Stable release documentation with complete feature set.
+All APIs are now production-ready.
+
+## Architecture
+The service uses a modular architecture with clear separation of concerns.
+Each module handles a specific aspect of data processing.
+New caching layer improves performance significantly.
+
+## API Reference
+- GET /api/v1/status
+- POST /api/v1/sync
+- PUT /api/v1/data/{id}
+- DELETE /api/v1/data/{id}
+- GET /api/v1/metrics
+
+## Performance
+Optimized for high throughput with minimal latency.
+Supports up to 10,000 concurrent connections.
