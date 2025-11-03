@@ -96,7 +96,7 @@ class DocTUIView:
         # Try to load cached analyses for the current version
         self._load_cached_analyses()
         if not any(self.current_analyses.values()):
-            self.status = "Press B for brief or D for deep analysis"
+            self.status = "Press D to analyze commit"
         
         # Set nodelay for non-blocking input and animation
         scr.nodelay(True)
@@ -235,27 +235,29 @@ class DocTUIView:
             brief_status = analysis_status.get("brief")
             deep_status = analysis_status.get("deep")
             
-            # Determine what D button should show based on current state
+            # Only show D indicator when there's analysis or it's in progress
+            d_indicator = ""
             if deep_status:
-                # Deep analysis exists - show deep status
+                # Deep analysis exists or in progress - show status
                 d_indicator = self._get_status_indicator(deep_status, "D")
             elif brief_status:
-                # Only brief exists - D can make it deeper
-                d_indicator = self._get_status_indicator(brief_status, "D") if brief_status in ["pending", "running"] else " D "
-            else:
-                # No analysis - D can start brief
-                d_indicator = " D "
+                # Brief analysis exists or in progress - show status  
+                d_indicator = self._get_status_indicator(brief_status, "D")
+            # No indicator if no analysis at all
             
-            # Format line with single D indicator on the right
+            # Format line 
             base_line = f"{prefix} {icon} {commit.short_hash} {commit.message}"
             
-            # Fit to width with D indicator aligned right
-            max_msg_len = w - len(d_indicator) - 3
-            if len(base_line) > max_msg_len:
-                base_line = base_line[:max_msg_len-1] + "…"
-            
-            # Pad and add indicator
-            line = base_line.ljust(w - len(d_indicator) - 1) + d_indicator
+            if d_indicator:
+                # Fit to width with D indicator aligned right
+                max_msg_len = w - len(d_indicator) - 3
+                if len(base_line) > max_msg_len:
+                    base_line = base_line[:max_msg_len-1] + "…"
+                # Pad and add indicator
+                line = base_line.ljust(w - len(d_indicator) - 1) + d_indicator
+            else:
+                # No indicator - just the commit line
+                line = base_line[:w-2]
             
             try:
                 scr.addnstr(y + i, x, line[:w], w, attr)
@@ -394,9 +396,7 @@ class DocTUIView:
             if not self.status or not any(indicator in self.status for indicator in ["🤖", "📊", "📝"]):
                 scr.addstr(y, x, "⏸️  No analysis yet", curses.color_pair(PALETTE["dim"]))
                 y += 2
-                scr.addstr(y, x, "Press B for brief analysis", curses.color_pair(PALETTE["dim"]))
-                y += 1
-                scr.addstr(y, x, "Press D for deep analysis", curses.color_pair(PALETTE["dim"]))
+                scr.addstr(y, x, "Press D to analyze", curses.color_pair(PALETTE["dim"]))
     
     def _draw_llm_deep_analysis(self, scr, y, x, w, h):
         """Show detailed LLM analysis"""
@@ -814,7 +814,7 @@ class DocTUIView:
         if self.current_analyses["brief"] or self.current_analyses["deep"]:
             self.status = "📦 Using cached analyses"
         else:
-            self.status = "Press B for brief or D for deep analysis"
+            self.status = "Press D to analyze commit"
     
     def _word_wrap(self, text: str, width: int) -> List[str]:
         """Simple word wrapping"""
