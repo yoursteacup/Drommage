@@ -90,6 +90,18 @@ class AnalysisQueue:
             if task.status in (TaskStatus.PENDING, TaskStatus.RUNNING)
         ]
     
+    def get_commit_analysis_status(self, commit_hash: str) -> dict:
+        """Get analysis status for a specific commit"""
+        status = {"brief": None, "deep": None}
+        
+        for task in self.tasks.values():
+            if commit_hash in task.context:
+                level = task.level.value
+                if level in ["brief", "deep"]:
+                    status[level] = task.status.value
+        
+        return status
+    
     def _worker(self):
         """Background worker that processes analysis tasks"""
         while self.running:

@@ -59,6 +59,7 @@ class DocTUIView:
         self.status = ""
         self.current_analysis = None
         self.active_tasks = []  # Track running analysis tasks
+        self.animation_frame = 0  # For animated indicators
         
     def run(self):
         curses.wrapper(self._main)
@@ -97,7 +98,13 @@ class DocTUIView:
         if not self.current_analysis:
             self.status = "Press B for brief or D for deep analysis"
         
+        # Set timeout for non-blocking input to enable animation
+        scr.timeout(100)  # 100ms timeout
+        
         while True:
+            # Update animation frame
+            self.animation_frame = (self.animation_frame + 1) % 100
+            
             scr.erase()
             h, w = scr.getmaxyx()
             
@@ -129,10 +136,11 @@ class DocTUIView:
             
             scr.refresh()
             
-            # Handle input
+            # Handle input (non-blocking)
             ch = scr.getch()
-            if not self._handle_input(ch):
-                break
+            if ch != -1:  # Key was pressed
+                if not self._handle_input(ch):
+                    break
     
     def _draw_frame(self, scr, h, w, left_width, top_height):
         """Draw enhanced UI frame with Unicode box drawing"""
@@ -215,11 +223,50 @@ class DocTUIView:
             elif msg_lower.startswith("docs"):
                 icon = "📚"
             
-            line = f"{prefix} {icon} {commit.short_hash} {commit.message[:w-15]}"
+            # Get analysis status for this commit
+            analysis_status = self.analysis_queue.get_commit_analysis_status(commit.hash)
+            
+            # Generate status indicators with animation
+            brief_indicator = self._get_status_indicator(analysis_status.get("brief"), "B")
+            deep_indicator = self._get_status_indicator(analysis_status.get("deep"), "D")
+            
+            # Format line with status indicators on the right
+            base_line = f"{prefix} {icon} {commit.short_hash} {commit.message}"
+            status_indicators = f"{brief_indicator}{deep_indicator}"
+            
+            # Fit to width with status indicators aligned right
+            max_msg_len = w - len(status_indicators) - 3
+            if len(base_line) > max_msg_len:
+                base_line = base_line[:max_msg_len-1] + "…"
+            
+            # Pad and add indicators
+            line = base_line.ljust(w - len(status_indicators) - 1) + status_indicators
+            
             try:
                 scr.addnstr(y + i, x, line[:w], w, attr)
             except:
                 pass
+    
+    def _get_status_indicator(self, status: str, button_type: str) -> str:
+        """Generate animated status indicator for analysis buttons (B/D)"""
+        if status is None:
+            return f" {button_type} "  # Default button
+        elif status == "pending":
+            # Animate waiting dots
+            dots = ["   ", ".  ", ".. ", "..."]
+            dot_idx = (self.animation_frame // 5) % len(dots)
+            return f"[{button_type}{dots[dot_idx][:-1]}]"
+        elif status == "running":
+            # Animate spinning indicator
+            spinners = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+            spinner_idx = (self.animation_frame // 2) % len(spinners)
+            return f"[{button_type}{spinners[spinner_idx]}]"
+        elif status == "completed":
+            return f"[{button_type}✓]"
+        elif status == "failed":
+            return f"[{button_type}✗]"
+        else:
+            return f" {button_type} "
     
     def _draw_queue_panel(self, scr, y, x, w, h):
         """Draw analysis queue status"""
