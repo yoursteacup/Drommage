@@ -1,7 +1,0 @@
-# DRommage Data Service
-
-## Overview
-Initial documentation draft for the data service.
-
-## Purpose
-This service handles data synchronization between modules.
