@@ -230,8 +230,13 @@ class DocTUIView:
             elif msg_lower.startswith("docs"):
                 icon = "📚"
             
-            # Get analysis status for this commit  
-            analysis_status = self.analysis_queue.get_commit_analysis_status(commit.hash, commit.short_hash)
+            # Get analysis status for this commit with exact pattern matching
+            prev_short_hash = None
+            if i < len(self.commits) - 1:
+                prev_short_hash = self.commits[i + 1].short_hash
+            
+            analysis_status = self.analysis_queue.get_commit_analysis_status(
+                commit.hash, commit.short_hash, prev_short_hash)
             brief_status = analysis_status.get("brief")
             deep_status = analysis_status.get("deep")
             
