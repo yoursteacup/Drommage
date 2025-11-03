@@ -84,10 +84,10 @@ class DocTUIView:
         # Store screen reference for updates
         self.scr = scr
         
-        # Don't run initial analysis - let user trigger it
-        # This makes startup faster
-        self.current_analysis = None
-        self.status = "Press ↑↓ to navigate, D for analysis"
+        # Try to load cached brief analysis for the current version
+        self._load_cached_brief_analysis()
+        if not self.current_analysis:
+            self.status = "Press B for brief or D for deep analysis"
         
         while True:
             scr.erase()
@@ -271,7 +271,7 @@ class DocTUIView:
             if not self.status or not any(indicator in self.status for indicator in ["🤖", "📊", "📝"]):
                 scr.addstr(y, x, "⏸️  No analysis yet", curses.color_pair(PALETTE["dim"]))
                 y += 2
-                scr.addstr(y, x, "Press ↑↓ to navigate versions", curses.color_pair(PALETTE["dim"]))
+                scr.addstr(y, x, "Press B for brief analysis", curses.color_pair(PALETTE["dim"]))
                 y += 1
                 scr.addstr(y, x, "Press D for deep analysis", curses.color_pair(PALETTE["dim"]))
     
@@ -533,13 +533,13 @@ class DocTUIView:
             if ch in (curses.KEY_UP, ord('k')):
                 self.selected_version_idx = max(0, self.selected_version_idx - 1)
                 self.right_scroll = 0
-                self.current_analysis = None  # Clear previous analysis
-                self.status = "Press D to analyze this version"
+                # Try to load cached brief analysis
+                self._load_cached_brief_analysis()
             elif ch in (curses.KEY_DOWN, ord('j')):
                 self.selected_version_idx = min(len(self.versions) - 1, self.selected_version_idx + 1)
                 self.right_scroll = 0
-                self.current_analysis = None  # Clear previous analysis
-                self.status = "Press D to analyze this version"
+                # Try to load cached brief analysis
+                self._load_cached_brief_analysis()
             elif ch in (ord('b'), ord('B')):
                 # Brief analysis
                 self.status = "🚀 Running brief analysis..."
@@ -646,6 +646,31 @@ class DocTUIView:
             self._draw_llm_deep_analysis(scr, top_height + 1, 2, left_width - 3, bottom_height - 2)
         
         scr.refresh()
+    
+    def _load_cached_brief_analysis(self):
+        """Load cached brief analysis if available"""
+        if self.selected_version_idx == 0:
+            # First version - no previous to compare
+            self.current_analysis = DiffAnalysis(
+                summary="Initial version of the documentation",
+                change_type=ChangeType.DOCUMENTATION,
+                impact_level="low",
+                confidence=1.0
+            )
+            return
+        
+        # Get diff versions
+        prev_ver = self.versions[self.selected_version_idx - 1]
+        curr_ver = self.versions[self.selected_version_idx]
+        
+        # Check cache for brief analysis
+        cache_key = f"{prev_ver}_{curr_ver}_{AnalysisLevel.BRIEF.value}"
+        if cache_key in self.llm_cache:
+            self.current_analysis = self.llm_cache[cache_key]
+            self.status = "📦 Using cached brief analysis"
+        else:
+            self.current_analysis = None
+            self.status = "Press B for brief or D for deep analysis"
     
     def _word_wrap(self, text: str, width: int) -> List[str]:
         """Simple word wrapping"""
