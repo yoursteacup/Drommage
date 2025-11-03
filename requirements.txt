@@ -1,0 +1,7 @@
+# No external dependencies required!
+# DRommage uses only Python standard library
+
+# Optional: For LLM support, install Ollama separately:
+# macOS: brew install ollama
+# Linux: curl -fsSL https://ollama.ai/install.sh | sh
+# Then: ollama pull mistral

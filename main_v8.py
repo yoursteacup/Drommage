@@ -10,7 +10,7 @@ from core.region_index import RegionIndex
 from core.tui_v8 import DocTUIView
 
 PROJECT_ROOT = Path(__file__).parent
-DOCS_DIR = PROJECT_ROOT / "docs"
+DOCS_DIR = PROJECT_ROOT / "test_docs" / "docs"
 
 # История версий документа
 HISTORY = [
