@@ -230,24 +230,32 @@ class DocTUIView:
             elif msg_lower.startswith("docs"):
                 icon = "📚"
             
-            # Get analysis status for this commit
+            # Get analysis status for this commit  
             analysis_status = self.analysis_queue.get_commit_analysis_status(commit.hash)
+            brief_status = analysis_status.get("brief")
+            deep_status = analysis_status.get("deep")
             
-            # Generate status indicators with animation
-            brief_indicator = self._get_status_indicator(analysis_status.get("brief"), "B")
-            deep_indicator = self._get_status_indicator(analysis_status.get("deep"), "D")
+            # Determine what D button should show based on current state
+            if deep_status:
+                # Deep analysis exists - show deep status
+                d_indicator = self._get_status_indicator(deep_status, "D")
+            elif brief_status:
+                # Only brief exists - D can make it deeper
+                d_indicator = self._get_status_indicator(brief_status, "D") if brief_status in ["pending", "running"] else " D "
+            else:
+                # No analysis - D can start brief
+                d_indicator = " D "
             
-            # Format line with status indicators on the right
+            # Format line with single D indicator on the right
             base_line = f"{prefix} {icon} {commit.short_hash} {commit.message}"
-            status_indicators = f"{brief_indicator}{deep_indicator}"
             
-            # Fit to width with status indicators aligned right
-            max_msg_len = w - len(status_indicators) - 3
+            # Fit to width with D indicator aligned right
+            max_msg_len = w - len(d_indicator) - 3
             if len(base_line) > max_msg_len:
                 base_line = base_line[:max_msg_len-1] + "…"
             
-            # Pad and add indicators
-            line = base_line.ljust(w - len(status_indicators) - 1) + status_indicators
+            # Pad and add indicator
+            line = base_line.ljust(w - len(d_indicator) - 1) + d_indicator
             
             try:
                 scr.addnstr(y + i, x, line[:w], w, attr)
@@ -607,23 +615,20 @@ class DocTUIView:
         if self.mode == "view":
             help_items = [
                 ("↑↓", "navigate"),
-                ("B", "brief"),
-                ("D", "deep analysis"), 
-                ("L", "toggle detail"),
-                ("Q", "queue"),
+                ("D", "analyze/toggle"),
+                ("Q", "queue/quit"),
                 ("R", "regions"),
-                ("PgUp/Dn", "scroll"),
-                ("Esc", "quit")
+                ("PgUp/Dn", "scroll")
             ]
         elif self.mode == "queue":
             help_items = [
-                ("ESC", "back"),
-                ("C", "clear completed")
+                ("Q", "quit"),
+                ("any key", "back")
             ]
         elif self.mode == "llm_detail":
             help_items = [
-                ("ESC", "back"),
-                ("↑↓", "scroll")
+                ("D", "back to brief"),
+                ("any key", "back")
             ]
         else:
             help_items = [("ESC", "back")]
@@ -662,8 +667,6 @@ class DocTUIView:
     
     def _handle_input(self, ch):
         """Handle keyboard input"""
-        if ch == 27 and self.mode == "view":  # ESC key
-            return False
         
         if self.mode == "view":
             if ch in (curses.KEY_UP, ord('k')):
@@ -674,18 +677,15 @@ class DocTUIView:
                 self.selected_commit_idx = min(len(self.commits) - 1, self.selected_commit_idx + 1)
                 self.right_scroll = 0
                 self._load_cached_analyses()
-            elif ch in (ord('b'), ord('B')):
-                # Queue brief analysis
-                self._queue_analysis(AnalysisLevel.BRIEF)
             elif ch in (ord('d'), ord('D')):
-                # Queue deep analysis
-                self._queue_analysis(AnalysisLevel.DETAILED)
-            elif ch in (ord('l'), ord('L')):
-                # Toggle detailed view
-                self.mode = "llm_detail" if self.mode != "llm_detail" else "view"
+                # Smart D button logic
+                self._handle_d_button()
             elif ch in (ord('q'), ord('Q')):
-                # Show queue
-                self.mode = "queue"
+                # Show queue or quit
+                if self.mode == "queue":
+                    return False  # Quit
+                else:
+                    self.mode = "queue"  # Show queue
             elif ch in (ord('r'), ord('R')):
                 # Toggle region detail mode
                 if self.selected_region:
@@ -696,8 +696,8 @@ class DocTUIView:
                 self.right_scroll = max(0, self.right_scroll - 10)
         
         elif self.mode in ("region_detail", "llm_detail"):
-            if ch == 27:  # ESC
-                self.mode = "view"
+            # Return to main view on any key
+            self.mode = "view"
         
         return True
     
@@ -908,3 +908,27 @@ class DocTUIView:
         
         self.analysis_queue.add_task(task)
         self.status = f"🔄 Queued {level.value} analysis: {context}"
+    
+    def _handle_d_button(self):
+        """Smart D button: starts brief → deep → toggles view"""
+        if self.selected_commit_idx < 0 or self.selected_commit_idx >= len(self.commits):
+            return
+        
+        current_commit = self.commits[self.selected_commit_idx]
+        brief_analysis = self.current_analyses.get("brief")
+        deep_analysis = self.current_analyses.get("deep")
+        
+        if not brief_analysis:
+            # No analysis yet - start brief
+            self._queue_analysis(AnalysisLevel.BRIEF)
+        elif not deep_analysis:
+            # Have brief, no deep - start deep
+            self._queue_analysis(AnalysisLevel.DETAILED)
+        else:
+            # Have both - toggle view between brief and deep
+            if self.mode == "llm_detail":
+                self.mode = "view"  # Switch to brief view
+                self.status = "📝 Showing brief analysis"
+            else:
+                self.mode = "llm_detail"  # Switch to deep view  
+                self.status = "📊 Showing deep analysis"
