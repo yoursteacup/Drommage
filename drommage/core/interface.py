@@ -626,7 +626,7 @@ class DocTUIView:
                 ("D", "analyze/toggle"),
                 ("Q", "queue/quit"),
                 ("R", "regions"),
-                ("PgUp/Dn", "scroll")
+                ("←→/hl", "scroll")
             ]
         elif self.mode == "queue":
             help_items = [
@@ -698,9 +698,9 @@ class DocTUIView:
                 # Toggle region detail mode
                 if self.selected_region:
                     self.mode = "region_detail"
-            elif ch == curses.KEY_NPAGE:
+            elif ch in (curses.KEY_RIGHT, ord('l')):
                 self.right_scroll += 10
-            elif ch == curses.KEY_PPAGE:
+            elif ch in (curses.KEY_LEFT, ord('h')):
                 self.right_scroll = max(0, self.right_scroll - 10)
         
         elif self.mode in ("region_detail", "llm_detail"):
