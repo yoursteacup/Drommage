@@ -383,7 +383,7 @@ class DocTUIView:
             
             # Word wrap summary  
             summary_lines = self._word_wrap(current_analysis.summary, w - 2)
-            for line in summary_lines[:5]:  # Больше строк для summary
+            for line in summary_lines[:10]:  # Еще больше строк для summary
                 scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["llm_summary"]))
                 y += 1
             
@@ -399,7 +399,7 @@ class DocTUIView:
             
             # Hint for switching analysis type
             if y < h - 1:
-                hint = "Press 'B' for brief analysis" if analysis_type == "deep" else "Press 'D' for deep analysis"
+                hint = "Press 'D' to switch to brief" if analysis_type == "deep" else "Press 'D' for deep analysis"
                 scr.addstr(h - 2, x, hint, curses.color_pair(PALETTE["dim"]) | curses.A_ITALIC)
         else:
             # No analysis available yet
