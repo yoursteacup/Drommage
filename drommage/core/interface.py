@@ -383,7 +383,11 @@ class DocTUIView:
             
             # Word wrap summary  
             summary_lines = self._word_wrap(current_analysis.summary, w - 2)
-            for line in summary_lines[:10]:  # Еще больше строк для summary
+            # Use all available space for summary
+            available_lines = h - y - 5  # Reserve some space for details/hints
+            for line in summary_lines[:available_lines]:
+                if y >= h - 3:  # Safety check
+                    break
                 scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["llm_summary"]))
                 y += 1
             
@@ -435,7 +439,11 @@ class DocTUIView:
             scr.addstr(y, x, "📋 Summary:", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
             y += 1
             summary_lines = self._word_wrap(deep_analysis.summary, w - 2)
-            for line in summary_lines[:8]:  # Больше строк для deep summary
+            # Use more space for deep summary
+            available_lines = h - y - 8  # Reserve space for details/risks/recommendations
+            for line in summary_lines[:available_lines]:
+                if y >= h - 6:  # Safety check
+                    break
                 scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["llm_summary"]))
                 y += 1
             y += 1
@@ -703,7 +711,29 @@ class DocTUIView:
             elif ch in (curses.KEY_LEFT, ord('h')):
                 self.right_scroll = max(0, self.right_scroll - 10)
         
-        elif self.mode in ("region_detail", "llm_detail"):
+        elif self.mode == "llm_detail":
+            # Allow navigation in deep mode
+            if ch in (curses.KEY_UP, ord('k')):
+                self.selected_commit_idx = max(0, self.selected_commit_idx - 1)
+                self.right_scroll = 0
+                self._load_cached_analyses()
+            elif ch in (curses.KEY_DOWN, ord('j')):
+                self.selected_commit_idx = min(len(self.commits) - 1, self.selected_commit_idx + 1)
+                self.right_scroll = 0
+                self._load_cached_analyses()
+            elif ch in (ord('d'), ord('D')):
+                # Smart D button logic
+                self._handle_d_button()
+            elif ch in (ord('q'), ord('Q')):
+                # Show queue or quit
+                if self.mode == "queue":
+                    return False  # Quit
+                else:
+                    self.mode = "queue"  # Show queue
+            else:
+                # Any other key returns to main view
+                self.mode = "view"
+        elif self.mode == "region_detail":
             # Return to main view on any key
             self.mode = "view"
         
