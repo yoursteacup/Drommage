@@ -63,7 +63,29 @@ class DocTUIView:
         self.animation_frame = 0  # For animated indicators
         
     def run(self):
-        curses.wrapper(self._main)
+        # Custom curses wrapper to handle terminal issues
+        try:
+            import curses
+            scr = curses.initscr()
+            try:
+                # Basic setup without problematic calls
+                curses.noecho()
+                try:
+                    curses.cbreak()
+                except:
+                    pass  # Ignore cbreak errors
+                
+                self._main(scr)
+            finally:
+                try:
+                    curses.echo()
+                    curses.nocbreak() 
+                    curses.endwin()
+                except:
+                    pass  # Ignore cleanup errors
+        except Exception as e:
+            print(f"Terminal interface failed: {e}")
+            print("Try running in a different terminal or use a simpler interface")
     
     def _init_colors(self):
         if curses.has_colors():
@@ -87,8 +109,16 @@ class DocTUIView:
             curses.init_pair(PALETTE["dim"], curses.COLOR_WHITE, -1)
     
     def _main(self, scr):
-        curses.curs_set(0)
-        scr.keypad(True)
+        try:
+            curses.curs_set(0)
+        except:
+            pass  # Some terminals don't support cursor visibility
+        
+        try:
+            scr.keypad(True)
+        except:
+            pass
+            
         self._init_colors()
         
         # Store screen reference for updates
@@ -98,57 +128,77 @@ class DocTUIView:
         self._load_cached_analyses()
         if not any(self.current_analyses.values()):
             self.status = "Press D to analyze commit"
+        else:
+            # Clear any existing status if we have analyses
+            self.status = ""
         
         # Set nodelay for non-blocking input and animation
-        scr.nodelay(True)
+        try:
+            scr.nodelay(True)
+        except:
+            # Fallback to timeout mode
+            scr.timeout(100)
         
         while True:
-            # Update animation frame for visual feedback
-            self.animation_frame = (self.animation_frame + 1) % 100
-            
-            scr.erase()
-            h, w = scr.getmaxyx()
-            
-            # Layout with golden ratio
-            left_width = int(w * 0.382)  # Golden ratio
-            right_width = w - left_width - 1
-            top_height = int(h * 0.45)
-            bottom_height = h - top_height - 2
-            
-            # Draw enhanced frame
-            self._draw_frame(scr, h, w, left_width, top_height)
-            
-            # Draw panels based on mode
-            if self.mode == "view":
-                self._draw_history_panel(scr, 2, 2, left_width - 3, top_height - 3)
-                self._draw_llm_analysis_panel(scr, top_height + 1, 2, left_width - 3, bottom_height - 2)
-                self._draw_document_panel(scr, 2, left_width + 2, right_width - 3, h - 4)
-            elif self.mode == "region_detail":
-                self._draw_history_panel(scr, 2, 2, left_width - 3, top_height - 3)
-                self._draw_region_detail(scr, top_height + 1, 2, left_width - 3, bottom_height - 2)
-                self._draw_region_history(scr, 2, left_width + 2, right_width - 3, h - 4)
-            elif self.mode == "llm_detail":
-                self._draw_history_panel(scr, 2, 2, left_width - 3, top_height - 3)
-                self._draw_llm_deep_analysis(scr, top_height + 1, 2, left_width - 3, bottom_height - 2)
-                self._draw_document_panel(scr, 2, left_width + 2, right_width - 3, h - 4)
-            
-            # Status bar with gradient
-            self._draw_status_bar(scr, h - 1, w)
-            
-            scr.refresh()
-            
-            # Handle input (non-blocking)
             try:
-                ch = scr.getch()
-                if ch != -1:  # Key was pressed
-                    if not self._handle_input(ch):
-                        break
-            except:
-                pass
-            
-            # Small delay for animation
-            import time
-            time.sleep(0.1)
+                # Update animation frame for visual feedback
+                self.animation_frame = (self.animation_frame + 1) % 100
+                
+                scr.erase()
+                h, w = scr.getmaxyx()
+                
+                # Layout with golden ratio
+                left_width = int(w * 0.382)  # Golden ratio
+                right_width = w - left_width - 1
+                top_height = int(h * 0.45)
+                bottom_height = h - top_height - 2
+                
+                # Draw enhanced frame
+                self._draw_frame(scr, h, w, left_width, top_height)
+                
+                # Draw panels based on mode
+                if self.mode == "view":
+                    self._draw_history_panel(scr, 2, 2, left_width - 3, top_height - 3)
+                    self._draw_llm_analysis_panel(scr, top_height + 1, 2, left_width - 3, bottom_height - 2)
+                    self._draw_document_panel(scr, 2, left_width + 2, right_width - 3, h - 4)
+                elif self.mode == "region_detail":
+                    self._draw_history_panel(scr, 2, 2, left_width - 3, top_height - 3)
+                    self._draw_region_detail(scr, top_height + 1, 2, left_width - 3, bottom_height - 2)
+                    self._draw_region_history(scr, 2, left_width + 2, right_width - 3, h - 4)
+                elif self.mode == "llm_detail":
+                    self._draw_history_panel(scr, 2, 2, left_width - 3, top_height - 3)
+                    self._draw_llm_deep_analysis(scr, top_height + 1, 2, left_width - 3, bottom_height - 2)
+                    self._draw_document_panel(scr, 2, left_width + 2, right_width - 3, h - 4)
+                
+                # Status bar with gradient
+                self._draw_status_bar(scr, h - 1, w)
+                
+                scr.refresh()
+                
+                # Handle input (non-blocking due to nodelay)
+                try:
+                    ch = scr.getch()
+                    if ch != -1:  # Key was pressed
+                        if not self._handle_input(ch):
+                            break
+                except:
+                    pass
+                
+                # Small delay for animation
+                import time
+                time.sleep(0.1)
+                    
+            except KeyboardInterrupt:
+                break
+            except Exception as e:
+                # On any error, try to continue or break gracefully
+                try:
+                    scr.addstr(0, 0, f"Error: {str(e)[:50]}")
+                    scr.refresh()
+                    import time
+                    time.sleep(1)
+                except:
+                    break
     
     def _draw_frame(self, scr, h, w, left_width, top_height):
         """Draw enhanced UI frame with Unicode box drawing"""
@@ -241,6 +291,19 @@ class DocTUIView:
             brief_status = analysis_status.get("brief")
             deep_status = analysis_status.get("deep")
             
+            # Also check cache for completed analyses
+            if not brief_status and i < len(self.commits) - 1:
+                prev_hash = self.commits[i+1].hash
+                brief_key = f"{prev_hash}_{commit.hash}_brief"
+                if brief_key in self.llm_cache:
+                    brief_status = "completed"
+                    
+            if not deep_status and i < len(self.commits) - 1:
+                prev_hash = self.commits[i+1].hash  
+                deep_key = f"{prev_hash}_{commit.hash}_detailed"
+                if deep_key in self.llm_cache:
+                    deep_status = "completed"
+            
             # Show both brief (d) and deep (D) indicators when available
             brief_indicator = ""
             deep_indicator = ""
@@ -248,27 +311,39 @@ class DocTUIView:
             if brief_status:
                 # Brief analysis - use lowercase d
                 brief_indicator = self._get_status_indicator(brief_status, "d")
+            elif i == self.selected_commit_idx:
+                # Show default button for selected commit
+                brief_indicator = " d "
             
             if deep_status:
                 # Deep analysis - use uppercase D  
                 deep_indicator = self._get_status_indicator(deep_status, "D")
+            elif i == self.selected_commit_idx and brief_status == "completed":
+                # Show default D button if brief is done but deep isn't
+                deep_indicator = " D "
             
             # Combine indicators
             indicators = brief_indicator + deep_indicator
             
-            # Format line 
-            base_line = f"{prefix} {icon} {commit.short_hash} {commit.message}"
+            # Format full line first
+            full_line = f"{prefix} {icon} {commit.short_hash} {commit.message}"
             
+            # Add indicators to the full line
             if indicators:
-                # Fit to width with indicators aligned right
-                max_msg_len = w - len(indicators) - 3
-                if len(base_line) > max_msg_len:
-                    base_line = base_line[:max_msg_len-1] + "…"
-                # Pad and add indicators
-                line = base_line.ljust(w - len(indicators) - 1) + indicators
+                full_line = full_line + " " + indicators
+            
+            # Apply horizontal scrolling to the complete line
+            if self.commit_scroll > 0:
+                # Show scroll position indicator at start if scrolled
+                if len(full_line) > self.commit_scroll:
+                    line = "←" + full_line[self.commit_scroll + 1:]
+                else:
+                    line = "←"
             else:
-                # No indicators - just the commit line
-                line = base_line[:w-2]
+                line = full_line
+            
+            # Trim to fit width
+            line = line[:w-1]
             
             try:
                 scr.addnstr(y + i, x, line[:w], w, attr)
@@ -325,6 +400,14 @@ class DocTUIView:
     
     def _draw_llm_analysis_panel(self, scr, y, x, w, h):
         """Draw LLM analysis of current commit changes"""
+        # CLEAR the panel area first to prevent text overlap
+        for clear_y in range(y, y + h):
+            try:
+                scr.move(clear_y, x)
+                scr.clrtoeol()
+            except:
+                pass
+        
         if not self.commits or self.selected_commit_idx < 0:
             scr.addstr(y, x, "🤖 AI Analysis", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
             y += 2
@@ -337,80 +420,113 @@ class DocTUIView:
         scr.addstr(y, x, "🤖 AI Analysis", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
         y += 2
         
-        # Show analysis status if we're currently analyzing
-        if self.status and any(indicator in self.status for indicator in ["🤖", "📊", "📝", "⏱️", "❌"]):
+        # Check if we're currently analyzing
+        is_analyzing = self.status and any(indicator in self.status for indicator in ["🤖", "📊", "📝", "⏱️", "🔄"])
+        
+        # Get or generate analysis (show brief by default, deep in detailed mode)
+        analysis_type = "deep" if self.mode == "llm_detail" else "brief"
+        current_analysis = self.current_analyses.get(analysis_type)
+        
+        # Try to get ANY available analysis if preferred one is not available
+        if not current_analysis:
+            # Try brief if we were looking for deep
+            if analysis_type == "deep":
+                current_analysis = self.current_analyses.get("brief")
+                if current_analysis:
+                    analysis_type = "brief"
+            # Try deep if we were looking for brief
+            else:
+                current_analysis = self.current_analyses.get("deep") 
+                if current_analysis:
+                    analysis_type = "deep"
+        
+        if is_analyzing and not current_analysis:
+            # Show analysis in progress
             scr.addstr(y, x, "⏳ Analysis in progress...", curses.color_pair(PALETTE["modified"]) | curses.A_BOLD)
-            y += 1
-            # Show the detailed status message
-            status_lines = self._word_wrap(self.status, w - 2)
-            for line in status_lines[:3]:
-                scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["llm_summary"]))
-                y += 1
+            y += 2
             
             # Show progress animation
             anim_frames = ["◐", "◓", "◑", "◒"]
             import time
             frame = anim_frames[int(time.time() * 2) % len(anim_frames)]
             scr.addstr(y, x, f"{frame} Processing...", curses.color_pair(PALETTE["dim"]))
-            y += 2
-        
-        # Get or generate analysis (show brief by default, deep in detailed mode)
-        analysis_type = "deep" if self.mode == "llm_detail" else "brief"
-        current_analysis = self.current_analyses.get(analysis_type)
-        
-        if current_analysis:
-            # Show analysis type indicator
+            return
+        elif current_analysis:
+            # Show completed analysis
             type_label = "📊 Deep Analysis" if analysis_type == "deep" else "📝 Brief Analysis"
             scr.addstr(y, x, type_label, curses.color_pair(PALETTE["icon"]) | curses.A_BOLD)
             y += 1
-            
-            # Show change type icon
-            scr.addstr(y, x, f"{current_analysis.change_type.value} Type: {current_analysis.change_type.name}", 
-                      curses.color_pair(PALETTE["icon"]))
-            y += 1
-            
-            # Impact level with visual indicator
-            impact_bars = {"low": "▁▁▁", "medium": "▃▃▃", "high": "▇▇▇"}
-            impact_color = {"low": PALETTE["stable"], "medium": PALETTE["modified"], "high": PALETTE["volatile"]}
-            bars = impact_bars.get(current_analysis.impact_level, "▁▁▁")
-            color = impact_color.get(current_analysis.impact_level, PALETTE["dim"])
-            scr.addstr(y, x, f"Impact: {bars} {current_analysis.impact_level}", 
-                      curses.color_pair(color))
-            y += 2
-            
-            # Summary
-            scr.addstr(y, x, "Summary:", curses.A_BOLD)
-            y += 1
-            
-            # Word wrap summary  
-            summary_lines = self._word_wrap(current_analysis.summary, w - 2)
-            # Show at least 5 lines of summary
-            for line in summary_lines[:8]:  # Show up to 8 lines
-                if y >= h - 1:  # Only stop at very bottom
-                    break
-                scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["llm_summary"]))
-                y += 1
-            
-            # Show details if available
-            if current_analysis.details and y < h - 3:
-                y += 1
-                scr.addstr(y, x, "Details:", curses.A_BOLD)
-                y += 1
-                detail_lines = self._word_wrap(current_analysis.details, w - 2)
-                for line in detail_lines[:h - y - 2]:
-                    scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["dim"]))
-                    y += 1
-            
-            # Hint for switching analysis type
-            if y < h - 1:
-                hint = "Press 'D' to switch to brief" if analysis_type == "deep" else "Press 'D' for deep analysis"
-                scr.addstr(h - 2, x, hint, curses.color_pair(PALETTE["dim"]) | curses.A_ITALIC)
         else:
-            # No analysis available yet
-            if not self.status or not any(indicator in self.status for indicator in ["🤖", "📊", "📝"]):
-                scr.addstr(y, x, "⏸️  No analysis yet", curses.color_pair(PALETTE["dim"]))
-                y += 2
-                scr.addstr(y, x, "Press D to analyze", curses.color_pair(PALETTE["dim"]))
+            # Show no analysis message
+            self._draw_no_analysis_message(scr, y, x, w, h)
+            return
+            
+        # Show change type icon  
+        # DEBUG: Check what's in change_type
+        try:
+            type_text = f"{current_analysis.change_type.value} Type: {current_analysis.change_type.name}"
+        except:
+            type_text = f"❓ Type: UNKNOWN (error accessing change_type)"
+        scr.addstr(y, x, type_text, curses.color_pair(PALETTE["icon"]))
+        y += 1
+        
+        # Impact level with visual indicator
+        impact_bars = {"low": "▁▁▁", "medium": "▃▃▃", "high": "▇▇▇"}
+        impact_color = {"low": PALETTE["stable"], "medium": PALETTE["modified"], "high": PALETTE["volatile"]}
+        bars = impact_bars.get(current_analysis.impact_level, "▁▁▁")
+        color = impact_color.get(current_analysis.impact_level, PALETTE["dim"])
+        scr.addstr(y, x, f"Impact: {bars} {current_analysis.impact_level}", 
+                  curses.color_pair(color))
+        y += 2
+        
+        # Summary
+        scr.addstr(y, x, "Summary:", curses.A_BOLD)
+        y += 1
+        
+        # Word wrap summary - DEBUG VERSION
+        with open("/tmp/drommage_debug.txt", "a") as f:
+            f.write(f"\n=== DISPLAY DEBUG ===\n")
+            f.write(f"current_analysis: {current_analysis}\n")
+            f.write(f"summary exists: {hasattr(current_analysis, 'summary')}\n")
+            f.write(f"summary value: {repr(getattr(current_analysis, 'summary', 'NO_ATTR'))}\n")
+            f.write(f"summary bool: {bool(getattr(current_analysis, 'summary', False))}\n")
+            f.write("=" * 25 + "\n")
+        
+        if current_analysis.summary:
+            summary_lines = self._word_wrap(current_analysis.summary, w - 2)
+            # Show summary lines without restrictive breaks
+            for line in summary_lines[:8]:  # Show up to 8 lines like working version
+                try:
+                    scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["llm_summary"]))
+                    y += 1
+                except:
+                    break
+        else:
+            # Summary is empty
+            scr.addstr(y, x, "⚠️ No summary available", curses.color_pair(PALETTE["dim"]))
+            y += 1
+        
+        # Show details if available
+        if current_analysis.details and y < h - 3:
+            y += 1
+            scr.addstr(y, x, "Details:", curses.A_BOLD)
+            y += 1
+            detail_lines = self._word_wrap(current_analysis.details, w - 2)
+            for line in detail_lines[:h - y - 2]:
+                scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["dim"]))
+                y += 1
+        
+        # Hint for switching analysis type
+        if y < h - 1:
+            hint = "Press 'D' to switch to brief" if analysis_type == "deep" else "Press 'D' for deep analysis"
+            scr.addstr(h - 2, x, hint, curses.color_pair(PALETTE["dim"]) | curses.A_ITALIC)
+    
+    def _draw_no_analysis_message(self, scr, y, x, w, h):
+        """Show message when no analysis is available"""
+        # No analysis available yet
+        scr.addstr(y, x, "⏸️  No analysis yet", curses.color_pair(PALETTE["dim"]))
+        y += 2
+        scr.addstr(y, x, "Press D to analyze", curses.color_pair(PALETTE["dim"]))
     
     def _draw_llm_deep_analysis(self, scr, y, x, w, h):
         """Show detailed LLM analysis"""
@@ -438,21 +554,31 @@ class DocTUIView:
             # Summary
             scr.addstr(y, x, "📋 Summary:", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
             y += 1
-            summary_lines = self._word_wrap(deep_analysis.summary, w - 2)
-            # Show more lines for deep summary
-            for line in summary_lines[:12]:  # Show up to 12 lines for deep
-                if y >= h - 3:  # Reserve some space for details
-                    break
-                scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["llm_summary"]))
+            
+            if deep_analysis.summary:
+                summary_lines = self._word_wrap(deep_analysis.summary, w - 2)
+                # Show significantly more lines for deep summary
+                for line in summary_lines[:20]:  # Show up to 20 lines for deep
+                    if y >= h - 1:  # Use almost all available space
+                        break
+                    try:
+                        scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["llm_summary"]))
+                        y += 1
+                    except:
+                        break
+            else:
+                scr.addstr(y, x, "⚠️ No summary available", curses.color_pair(PALETTE["dim"]))
                 y += 1
             y += 1
             
             # Detailed explanation
-            if deep_analysis.details:
+            if deep_analysis.details and y < h - 1:
                 scr.addstr(y, x, "📝 Details:", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
                 y += 1
                 detail_lines = self._word_wrap(deep_analysis.details, w - 2)
-                for line in detail_lines[:5]:
+                for line in detail_lines[:15]:  # Show more detail lines
+                    if y >= h - 1:
+                        break
                     scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["dim"]))
                     y += 1
                 y += 1
@@ -517,20 +643,33 @@ class DocTUIView:
                 scr.addstr(y, x, "Diff:", curses.A_BOLD)
                 y += 1
                 
-                # Show diff lines with word wrap
+                # Show diff lines with proper color preservation
                 raw_diff_lines = diff.diff_text.split('\n')
                 wrapped_diff_lines = []
                 for line in raw_diff_lines:
+                    # Get prefix for coloring
+                    prefix = line[0] if line and line[0] in '+-@' else ' '
+                    
                     if len(line) <= w - 4:
-                        wrapped_diff_lines.append((line, line[0] if line else ' '))  # (text, prefix)
+                        # Line fits, keep as is
+                        wrapped_diff_lines.append((line, prefix))
                     else:
-                        # Wrap long lines but preserve prefix for coloring
-                        prefix = line[0] if line else ' '
-                        wrapped = self._word_wrap(line, w - 4)
-                        for i, wrapped_line in enumerate(wrapped):
-                            # First line keeps original prefix, continuation lines get space
-                            line_prefix = prefix if i == 0 else ' '
-                            wrapped_diff_lines.append((wrapped_line, line_prefix))
+                        # Need to wrap - break at word boundaries but preserve prefix
+                        if len(line) > 1:
+                            content = line[1:] if prefix in '+-@' else line
+                            # Break into chunks manually to preserve meaning
+                            chunk_size = w - 6  # Leave room for prefix and indicators
+                            for i in range(0, len(content), chunk_size):
+                                chunk = content[i:i + chunk_size]
+                                if i == 0:
+                                    # First chunk gets original prefix
+                                    display_line = (prefix + chunk) if prefix in '+-@' else chunk
+                                else:
+                                    # Continuation chunks get continuation indicator
+                                    display_line = '…' + chunk
+                                wrapped_diff_lines.append((display_line, prefix))
+                        else:
+                            wrapped_diff_lines.append((line, prefix))
                 
                 # Apply vertical scrolling
                 diff_lines = wrapped_diff_lines[self.right_scroll:self.right_scroll + h - y - 2]
@@ -663,9 +802,9 @@ class DocTUIView:
         else:
             help_items = [("ESC", "back")]
         
-        # If we have a status message (like during analysis), show it prominently
-        if self.status and ("🤖" in self.status or "📊" in self.status or "📝" in self.status or "✅" in self.status or "⏱️" in self.status):
-            # Show analysis status prominently on the left
+        # Only show progress messages in status bar, not completed results
+        if self.status and ("🔄" in self.status or "⏳" in self.status or "🤖" in self.status or "❌" in self.status):
+            # Show analysis progress prominently on the left
             try:
                 scr.addstr(y, 2, self.status, curses.color_pair(PALETTE["llm_summary"]) | curses.A_BOLD)
             except:
@@ -684,8 +823,8 @@ class DocTUIView:
                 help_parts.append(f"[{key}] {desc}")
             help_text = " │ ".join(help_parts)
             
-            # Add status if present (non-analysis status)
-            if self.status:
+            # Add status if present (non-analysis status) BUT NOT if it's already shown above
+            if self.status and not any(indicator in self.status for indicator in ["🔄", "⏳", "🤖", "❌"]):
                 help_text = f"{self.status} │ {help_text}"
             
             # Center and display
@@ -724,6 +863,10 @@ class DocTUIView:
                 self.right_scroll += 10
             elif ch in (curses.KEY_LEFT, ord('h')):
                 self.right_scroll = max(0, self.right_scroll - 10)
+            elif ch == ord('L'):  # Shift+L - scroll commits right
+                self.commit_scroll += 5
+            elif ch == ord('H'):  # Shift+H - scroll commits left  
+                self.commit_scroll = max(0, self.commit_scroll - 5)
         
         elif self.mode == "llm_detail":
             # Allow navigation in deep mode
@@ -858,13 +1001,17 @@ class DocTUIView:
         brief_key = f"{prev_commit.hash}_{current_commit.hash}_{AnalysisLevel.BRIEF.value}"
         deep_key = f"{prev_commit.hash}_{current_commit.hash}_{AnalysisLevel.DETAILED.value}"
         
+        # Load cached analyses with correct mapping
+        brief_analysis = self.llm_cache.get(brief_key)
+        deep_analysis = self.llm_cache.get(deep_key)
+        
         self.current_analyses = {
-            "brief": self.llm_cache.get(brief_key),
-            "deep": self.llm_cache.get(deep_key)
+            "brief": brief_analysis,
+            "deep": deep_analysis
         }
         
         if self.current_analyses["brief"] or self.current_analyses["deep"]:
-            self.status = "📦 Using cached analyses"
+            self.status = ""  # Clear status when we have analyses - they show in panel
         else:
             self.status = "Press D to analyze commit"
     
@@ -897,6 +1044,7 @@ class DocTUIView:
     def _queue_analysis(self, level: AnalysisLevel):
         """Queue analysis task for current commit"""
         if self.selected_commit_idx < 0 or self.selected_commit_idx >= len(self.commits):
+            self.status = "❌ No commit selected"
             return
         
         current_commit = self.commits[self.selected_commit_idx]
@@ -905,7 +1053,7 @@ class DocTUIView:
         if self.selected_commit_idx < len(self.commits) - 1:
             prev_commit = self.commits[self.selected_commit_idx + 1]
         else:
-            self.status = "No previous commit to compare"
+            self.status = "❌ No previous commit to compare"
             return
         
         # Check if analysis already exists or is in progress
@@ -926,7 +1074,11 @@ class DocTUIView:
         # Get diff
         diff = self.git.get_commit_diff(prev_commit.hash, current_commit.hash)
         if not diff:
-            self.status = "Could not get commit diff"
+            self.status = "❌ Could not get commit diff"
+            return
+        
+        if not diff.diff_text:
+            self.status = "❌ Empty diff"
             return
         
         # Create task
@@ -934,24 +1086,100 @@ class DocTUIView:
         context = f"{prev_commit.short_hash}→{current_commit.short_hash}: {current_commit.message[:30]}"
         
         def on_complete(result: DiffAnalysis):
-            # Update appropriate current analysis if this is for the selected commit
-            if self.selected_commit_idx < len(self.commits):
-                selected = self.commits[self.selected_commit_idx]
-                if selected.hash == current_commit.hash:
-                    self.current_analyses[level.value] = result
-                    self.status = f"✅ {level.value.title()} analysis complete"
-            
-            # Cache the result
-            cache_key = f"{prev_commit.hash}_{current_commit.hash}_{level.value}"
-            self.llm_cache[cache_key] = result
+            try:
+                # DEBUG
+                with open("/tmp/drommage_debug.txt", "a") as f:
+                    f.write(f"\n=== CALLBACK DEBUG ===\n")
+                    f.write(f"Result summary: {repr(result.summary)}\n")
+                    f.write(f"Level: {level.value}\n")
+                    f.write(f"Selected idx: {self.selected_commit_idx}\n")
+                    f.write(f"Commits len: {len(self.commits)}\n")
+                    if self.selected_commit_idx < len(self.commits):
+                        f.write(f"Selected hash: {self.commits[self.selected_commit_idx].hash}\n")
+                        f.write(f"Current hash: {current_commit.hash}\n")
+                        f.write(f"Hash match: {self.commits[self.selected_commit_idx].hash == current_commit.hash}\n")
+                    f.write("=" * 30 + "\n")
+                
+                # Cache first
+                cache_key = f"{prev_commit.hash}_{current_commit.hash}_{level.value}"
+                self.llm_cache[cache_key] = result
+                
+                # ПРИНУДИТЕЛЬНО обновить current_analyses прямо сейчас
+                if self.selected_commit_idx < len(self.commits):
+                    selected_hash = self.commits[self.selected_commit_idx].hash
+                    if selected_hash == current_commit.hash:
+                        # Правильное соответствие значений level и ключей 
+                        if level.value == "brief":
+                            analysis_key = "brief"
+                        elif level.value == "detailed":  # AnalysisLevel.DETAILED.value == "detailed"
+                            analysis_key = "deep"
+                        else:
+                            analysis_key = "brief"  # fallback
+                        self.current_analyses[analysis_key] = result
+                        # Clear status so analysis shows in panel, not status bar
+                        self.status = ""
+                
+                # ПРИНУДИТЕЛЬНО обновить весь интерфейс
+                if hasattr(self, 'scr') and self.scr:
+                    try:
+                        h, w = self.scr.getmaxyx()
+                        left_width = int(w * 0.382)
+                        top_height = int(h * 0.45)
+                        bottom_height = h - top_height - 2
+                        
+                        # Обновить панель анализа
+                        if self.mode == "llm_detail":
+                            self._draw_llm_deep_analysis(self.scr, top_height + 1, 2, left_width - 3, bottom_height - 2)
+                        else:
+                            self._draw_llm_analysis_panel(self.scr, top_height + 1, 2, left_width - 3, bottom_height - 2)
+                        
+                        # Обновить панель коммитов для показа индикаторов
+                        self._draw_history_panel(self.scr, 2, 2, left_width - 3, top_height - 3)
+                        
+                        self.scr.refresh()
+                    except:
+                        pass
+                    
+            except Exception as e:
+                self.status = f"❌ Callback error: {str(e)[:40]}"
         
         def status_update(msg: str):
             self.status = msg
+            # Force UI refresh during analysis for real-time feedback
+            if hasattr(self, 'scr') and self.scr:
+                try:
+                    h, w = self.scr.getmaxyx()
+                    self._draw_status_bar(self.scr, h - 1, w)
+                    self.scr.refresh()
+                except:
+                    pass
+        
+        # Get file contents for proper analysis
+        prev_content = ""
+        curr_content = ""
+        
+        # Try to get representative file content from the diff
+        if diff.files:
+            # Get content of the first changed file as representative
+            main_file = diff.files[0]
+            
+            prev_file_content = self.git.get_file_content_at_commit(prev_commit.hash, main_file)
+            curr_file_content = self.git.get_file_content_at_commit(current_commit.hash, main_file)
+            
+            if prev_file_content is not None:
+                prev_content = prev_file_content
+                
+            if curr_file_content is not None:
+                curr_content = curr_file_content
+        
+        # If we can't get file contents, use the diff as new_text
+        if not curr_content:
+            curr_content = diff.diff_text
         
         task = AnalysisTask(
             id=task_id,
-            old_text="",  # We'll use the diff text directly
-            new_text=diff.diff_text,
+            old_text=prev_content,
+            new_text=curr_content,
             context=context,
             level=level,
             callback=on_complete,
@@ -960,6 +1188,14 @@ class DocTUIView:
         
         self.analysis_queue.add_task(task)
         self.status = f"🔄 Queued {level.value} analysis: {context}"
+        
+        # Force immediate status update for user feedback
+        if hasattr(self, 'scr') and self.scr:
+            try:
+                self._draw_status_bar(self.scr, self.scr.getmaxyx()[0] - 1, self.scr.getmaxyx()[1])
+                self.scr.refresh()
+            except:
+                pass
     
     def _handle_d_button(self):
         """Smart D button: starts brief → deep → toggles view"""

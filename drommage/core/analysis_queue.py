@@ -150,7 +150,12 @@ class AnalysisQueue:
                     
                     # Notify completion
                     if task.callback:
-                        task.callback(result)
+                        try:
+                            task.callback(result)
+                        except Exception as cb_error:
+                            print(f"Callback error: {cb_error}")
+                            if task.status_callback:
+                                task.status_callback(f"⚠️ Callback failed: {str(cb_error)[:30]}")
                         
                 except Exception as e:
                     # Mark as failed
