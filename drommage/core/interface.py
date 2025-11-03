@@ -249,8 +249,14 @@ class DocTUIView:
                 pass
     
     def _draw_llm_analysis_panel(self, scr, y, x, w, h):
-        """Draw LLM analysis of current version changes"""
-        version = self.versions[self.selected_version_idx]
+        """Draw LLM analysis of current commit changes"""
+        if not self.commits or self.selected_commit_idx < 0:
+            scr.addstr(y, x, "🤖 AI Analysis", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
+            y += 2
+            scr.addstr(y, x, "No commits available", curses.color_pair(PALETTE["dim"]))
+            return
+            
+        current_commit = self.commits[self.selected_commit_idx]
         
         # Header
         scr.addstr(y, x, "🤖 AI Analysis", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
@@ -393,50 +399,61 @@ class DocTUIView:
         scr.addstr(h - 2, x, "Press ESC to return", curses.color_pair(PALETTE["dim"]) | curses.A_ITALIC)
     
     def _draw_document_panel(self, scr, y, x, w, h):
-        """Draw document with enhanced region highlighting"""
-        version = self.versions[self.selected_version_idx]
-        lines = self.engine.get_document_lines(version)
+        """Draw commit diff view"""
+        if not self.commits or self.selected_commit_idx < 0:
+            scr.addstr(y, x, "📄 No commit selected", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
+            return
+            
+        current_commit = self.commits[self.selected_commit_idx]
         
-        # Header with version info
-        header = f"📄 {version}"
-        if self.selected_version_idx > 0:
-            prev_ver = self.versions[self.selected_version_idx - 1]
-            header += f" (from {prev_ver})"
+        # Header with commit info
+        header = f"📄 {current_commit.short_hash}: {current_commit.message[:30]}"
         scr.addstr(y, x, header, curses.A_BOLD | curses.color_pair(PALETTE["title"]))
         y += 2
         
-        # Document lines with region highlighting
-        visible_lines = lines[self.right_scroll:self.right_scroll + h - 2]
+        # Show commit stats
+        scr.addstr(y, x, f"Author: {current_commit.author}", curses.color_pair(PALETTE["dim"]))
+        y += 1
+        scr.addstr(y, x, f"Date: {current_commit.date}", curses.color_pair(PALETTE["dim"]))
+        y += 1
+        scr.addstr(y, x, f"Files: {current_commit.files_changed}, +{current_commit.insertions}, -{current_commit.deletions}", 
+                  curses.color_pair(PALETTE["modified"]))
+        y += 2
         
-        for i, line in enumerate(visible_lines):
-            line_num = self.right_scroll + i
+        # Get and show diff if available
+        if self.selected_commit_idx < len(self.commits) - 1:
+            prev_commit = self.commits[self.selected_commit_idx + 1]
+            diff = self.git.get_commit_diff(prev_commit.hash, current_commit.hash)
             
-            # Check if this line belongs to a region
-            region = self.engine.get_region_at_line(version, line_num)
-            
-            if region:
-                # Determine region volatility for coloring
-                if region.id in [r.id for r in self.region_index.get_most_volatile_regions()]:
-                    attr = curses.color_pair(PALETTE["volatile"])
-                    indicator = "!"
-                elif region.id in [r.id for r in self.region_index.get_most_stable_regions()]:
-                    attr = curses.color_pair(PALETTE["stable"])
-                    indicator = "="
-                else:
-                    attr = curses.color_pair(PALETTE["modified"])
-                    indicator = "~"
+            if diff and diff.diff_text:
+                scr.addstr(y, x, "Diff:", curses.A_BOLD)
+                y += 1
+                
+                # Show diff lines (simplified)
+                diff_lines = diff.diff_text.split('\n')[self.right_scroll:self.right_scroll + h - y - 2]
+                
+                for i, line in enumerate(diff_lines):
+                    if y + i >= h - 2:
+                        break
+                        
+                    # Color diff lines
+                    if line.startswith('+'):
+                        attr = curses.color_pair(PALETTE["added"])
+                    elif line.startswith('-'):
+                        attr = curses.color_pair(PALETTE["removed"])
+                    elif line.startswith('@@'):
+                        attr = curses.color_pair(PALETTE["modified"])
+                    else:
+                        attr = curses.color_pair(PALETTE["dim"])
                     
-                # Line number and indicator
-                line_str = f"{line_num+1:3d} {indicator} "
+                    try:
+                        scr.addnstr(y + i, x, line[:w], w, attr)
+                    except:
+                        pass
             else:
-                attr = curses.color_pair(PALETTE["dim"])
-                line_str = f"{line_num+1:3d}   "
-            
-            try:
-                scr.addstr(y + i, x, line_str, curses.color_pair(PALETTE["dim"]))
-                scr.addnstr(y + i, x + len(line_str), line[:w - len(line_str)], w - len(line_str), attr)
-            except:
-                pass
+                scr.addstr(y, x, "No diff available", curses.color_pair(PALETTE["dim"]))
+        else:
+            scr.addstr(y, x, "Initial commit", curses.color_pair(PALETTE["dim"]))
     
     def _draw_region_detail(self, scr, y, x, w, h):
         """Show details of selected region"""
@@ -579,33 +596,27 @@ class DocTUIView:
     
     def _handle_input(self, ch):
         """Handle keyboard input"""
-        if ch in (ord('q'), ord('Q')) and self.mode == "view":
+        if ch == 27 and self.mode == "view":  # ESC key
             return False
         
         if self.mode == "view":
             if ch in (curses.KEY_UP, ord('k')):
-                self.selected_version_idx = max(0, self.selected_version_idx - 1)
+                self.selected_commit_idx = max(0, self.selected_commit_idx - 1)
                 self.right_scroll = 0
-                # Try to load cached brief analysis
                 self._load_cached_brief_analysis()
             elif ch in (curses.KEY_DOWN, ord('j')):
-                self.selected_version_idx = min(len(self.versions) - 1, self.selected_version_idx + 1)
+                self.selected_commit_idx = min(len(self.commits) - 1, self.selected_commit_idx + 1)
                 self.right_scroll = 0
-                # Try to load cached brief analysis
                 self._load_cached_brief_analysis()
             elif ch in (ord('b'), ord('B')):
-                # Brief analysis
-                self.status = "🚀 Running brief analysis..."
-                self._refresh_display(self.scr)
-                self._analyze_current_version(AnalysisLevel.BRIEF, self.scr)
+                # Queue brief analysis
+                self._queue_analysis(AnalysisLevel.BRIEF)
             elif ch in (ord('d'), ord('D')):
-                # Deep analysis
-                self.status = "🚀 Running deep analysis..."
-                self.mode = "llm_detail"  # Switch mode first
-                self._refresh_display(self.scr)
-                self._analyze_current_version(AnalysisLevel.DETAILED, self.scr)
-                # Ensure we refresh after analysis completes
-                self._refresh_display(self.scr)
+                # Queue deep analysis
+                self._queue_analysis(AnalysisLevel.DETAILED)
+            elif ch in (ord('q'), ord('Q')):
+                # Show queue
+                self.mode = "queue"
             elif ch in (ord('r'), ord('R')):
                 # Toggle region detail mode
                 if self.selected_region:
@@ -702,22 +713,27 @@ class DocTUIView:
     
     def _load_cached_brief_analysis(self):
         """Load cached brief analysis if available"""
-        if self.selected_version_idx == 0:
-            # First version - no previous to compare
+        if not self.commits or self.selected_commit_idx < 0:
+            self.current_analysis = None
+            self.status = "No commits available"
+            return
+            
+        if self.selected_commit_idx >= len(self.commits) - 1:
+            # Last commit - no previous to compare  
             self.current_analysis = DiffAnalysis(
-                summary="Initial version of the documentation",
+                summary="Initial commit of the repository",
                 change_type=ChangeType.DOCUMENTATION,
                 impact_level="low",
                 confidence=1.0
             )
             return
         
-        # Get diff versions
-        prev_ver = self.versions[self.selected_version_idx - 1]
-        curr_ver = self.versions[self.selected_version_idx]
+        # Get commits for diff
+        current_commit = self.commits[self.selected_commit_idx]
+        prev_commit = self.commits[self.selected_commit_idx + 1]  # Git history is reverse chronological
         
         # Check cache for brief analysis
-        cache_key = f"{prev_ver}_{curr_ver}_{AnalysisLevel.BRIEF.value}"
+        cache_key = f"{prev_commit.hash}_{current_commit.hash}_{AnalysisLevel.BRIEF.value}"
         if cache_key in self.llm_cache:
             self.current_analysis = self.llm_cache[cache_key]
             self.status = "📦 Using cached brief analysis"
