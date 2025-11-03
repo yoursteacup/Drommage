@@ -57,7 +57,7 @@ class DocTUIView:
         self.mode = "view"  # view, region_detail, llm_detail, queue
         self.right_scroll = 0
         self.status = ""
-        self.current_analysis = None
+        self.current_analyses = {"brief": None, "deep": None}  # Separate analyses
         self.active_tasks = []  # Track running analysis tasks
         self.animation_frame = 0  # For animated indicators
         
@@ -93,16 +93,13 @@ class DocTUIView:
         # Store screen reference for updates
         self.scr = scr
         
-        # Try to load cached brief analysis for the current version
-        self._load_cached_brief_analysis()
-        if not self.current_analysis:
+        # Try to load cached analyses for the current version
+        self._load_cached_analyses()
+        if not any(self.current_analyses.values()):
             self.status = "Press B for brief or D for deep analysis"
         
-        # Set timeout for non-blocking input to enable animation
-        scr.timeout(100)  # 100ms timeout
-        
         while True:
-            # Update animation frame
+            # Update animation frame for visual feedback
             self.animation_frame = (self.animation_frame + 1) % 100
             
             scr.erase()
@@ -136,11 +133,10 @@ class DocTUIView:
             
             scr.refresh()
             
-            # Handle input (non-blocking)
+            # Handle input
             ch = scr.getch()
-            if ch != -1:  # Key was pressed
-                if not self._handle_input(ch):
-                    break
+            if not self._handle_input(ch):
+                break
     
     def _draw_frame(self, scr, h, w, left_width, top_height):
         """Draw enhanced UI frame with Unicode box drawing"""
@@ -326,19 +322,27 @@ class DocTUIView:
             scr.addstr(y, x, f"{frame} Processing...", curses.color_pair(PALETTE["dim"]))
             y += 2
         
-        # Get or generate analysis
-        if self.current_analysis:
+        # Get or generate analysis (show brief by default, deep in detailed mode)
+        analysis_type = "deep" if self.mode == "llm_detail" else "brief"
+        current_analysis = self.current_analyses.get(analysis_type)
+        
+        if current_analysis:
+            # Show analysis type indicator
+            type_label = "📊 Deep Analysis" if analysis_type == "deep" else "📝 Brief Analysis"
+            scr.addstr(y, x, type_label, curses.color_pair(PALETTE["icon"]) | curses.A_BOLD)
+            y += 1
+            
             # Show change type icon
-            scr.addstr(y, x, f"{self.current_analysis.change_type.value} Type: {self.current_analysis.change_type.name}", 
+            scr.addstr(y, x, f"{current_analysis.change_type.value} Type: {current_analysis.change_type.name}", 
                       curses.color_pair(PALETTE["icon"]))
             y += 1
             
             # Impact level with visual indicator
             impact_bars = {"low": "▁▁▁", "medium": "▃▃▃", "high": "▇▇▇"}
             impact_color = {"low": PALETTE["stable"], "medium": PALETTE["modified"], "high": PALETTE["volatile"]}
-            bars = impact_bars.get(self.current_analysis.impact_level, "▁▁▁")
-            color = impact_color.get(self.current_analysis.impact_level, PALETTE["dim"])
-            scr.addstr(y, x, f"Impact: {bars} {self.current_analysis.impact_level}", 
+            bars = impact_bars.get(current_analysis.impact_level, "▁▁▁")
+            color = impact_color.get(current_analysis.impact_level, PALETTE["dim"])
+            scr.addstr(y, x, f"Impact: {bars} {current_analysis.impact_level}", 
                       curses.color_pair(color))
             y += 2
             
@@ -347,25 +351,25 @@ class DocTUIView:
             y += 1
             
             # Word wrap summary
-            summary_lines = self._word_wrap(self.current_analysis.summary, w - 2)
+            summary_lines = self._word_wrap(current_analysis.summary, w - 2)
             for line in summary_lines[:3]:
                 scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["llm_summary"]))
                 y += 1
             
             # Show details if available
-            if self.current_analysis.details and y < h - 3:
+            if current_analysis.details and y < h - 3:
                 y += 1
                 scr.addstr(y, x, "Details:", curses.A_BOLD)
                 y += 1
-                detail_lines = self._word_wrap(self.current_analysis.details, w - 2)
+                detail_lines = self._word_wrap(current_analysis.details, w - 2)
                 for line in detail_lines[:h - y - 2]:
                     scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["dim"]))
                     y += 1
             
-            # Hint for deeper analysis
+            # Hint for switching analysis type
             if y < h - 1:
-                scr.addstr(h - 2, x, "Press 'D' for deeper analysis", 
-                          curses.color_pair(PALETTE["dim"]) | curses.A_ITALIC)
+                hint = "Press 'B' for brief analysis" if analysis_type == "deep" else "Press 'D' for deep analysis"
+                scr.addstr(h - 2, x, hint, curses.color_pair(PALETTE["dim"]) | curses.A_ITALIC)
         else:
             # No analysis available yet
             if not self.status or not any(indicator in self.status for indicator in ["🤖", "📊", "📝"]):
@@ -380,45 +384,48 @@ class DocTUIView:
         scr.addstr(y, x, "🔍 Deep Analysis", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
         y += 2
         
-        if self.current_analysis:
+        # Get deep analysis specifically
+        deep_analysis = self.current_analyses.get("deep")
+        
+        if deep_analysis:
             # Show change type and impact
-            scr.addstr(y, x, f"{self.current_analysis.change_type.value} Type: {self.current_analysis.change_type.name}", 
+            scr.addstr(y, x, f"{deep_analysis.change_type.value} Type: {deep_analysis.change_type.name}", 
                       curses.color_pair(PALETTE["icon"]))
             y += 1
             
             # Impact level
             impact_bars = {"low": "▁▁▁", "medium": "▃▃▃", "high": "▇▇▇"}
             impact_color = {"low": PALETTE["stable"], "medium": PALETTE["modified"], "high": PALETTE["volatile"]}
-            bars = impact_bars.get(self.current_analysis.impact_level, "▁▁▁")
-            color = impact_color.get(self.current_analysis.impact_level, PALETTE["dim"])
-            scr.addstr(y, x, f"Impact: {bars} {self.current_analysis.impact_level}", 
+            bars = impact_bars.get(deep_analysis.impact_level, "▁▁▁")
+            color = impact_color.get(deep_analysis.impact_level, PALETTE["dim"])
+            scr.addstr(y, x, f"Impact: {bars} {deep_analysis.impact_level}", 
                       curses.color_pair(color))
             y += 2
             
             # Summary
             scr.addstr(y, x, "📋 Summary:", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
             y += 1
-            summary_lines = self._word_wrap(self.current_analysis.summary, w - 2)
+            summary_lines = self._word_wrap(deep_analysis.summary, w - 2)
             for line in summary_lines[:3]:
                 scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["llm_summary"]))
                 y += 1
             y += 1
             
             # Detailed explanation
-            if self.current_analysis.details:
+            if deep_analysis.details:
                 scr.addstr(y, x, "📝 Details:", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
                 y += 1
-                detail_lines = self._word_wrap(self.current_analysis.details, w - 2)
+                detail_lines = self._word_wrap(deep_analysis.details, w - 2)
                 for line in detail_lines[:5]:
                     scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["dim"]))
                     y += 1
                 y += 1
             
             # Risks
-            if self.current_analysis.risks and y < h - 4:
+            if deep_analysis.risks and y < h - 4:
                 scr.addstr(y, x, "⚠️  Risks:", curses.A_BOLD | curses.color_pair(PALETTE["removed"]))
                 y += 1
-                for risk in self.current_analysis.risks[:2]:
+                for risk in deep_analysis.risks[:2]:
                     risk_lines = self._word_wrap(f"• {risk}", w - 2)
                     for line in risk_lines[:2]:
                         if y < h - 3:
@@ -427,10 +434,10 @@ class DocTUIView:
                 y += 1
             
             # Recommendations
-            if self.current_analysis.recommendations and y < h - 3:
+            if deep_analysis.recommendations and y < h - 3:
                 scr.addstr(y, x, "💡 Recommendations:", curses.A_BOLD | curses.color_pair(PALETTE["added"]))
                 y += 1
-                for rec in self.current_analysis.recommendations[:2]:
+                for rec in deep_analysis.recommendations[:2]:
                     rec_lines = self._word_wrap(f"• {rec}", w - 2)
                     for line in rec_lines[:2]:
                         if y < h - 2:
@@ -591,6 +598,7 @@ class DocTUIView:
                 ("↑↓", "navigate"),
                 ("B", "brief"),
                 ("D", "deep analysis"), 
+                ("L", "toggle detail"),
                 ("Q", "queue"),
                 ("R", "regions"),
                 ("PgUp/Dn", "scroll"),
@@ -650,17 +658,20 @@ class DocTUIView:
             if ch in (curses.KEY_UP, ord('k')):
                 self.selected_commit_idx = max(0, self.selected_commit_idx - 1)
                 self.right_scroll = 0
-                self._load_cached_brief_analysis()
+                self._load_cached_analyses()
             elif ch in (curses.KEY_DOWN, ord('j')):
                 self.selected_commit_idx = min(len(self.commits) - 1, self.selected_commit_idx + 1)
                 self.right_scroll = 0
-                self._load_cached_brief_analysis()
+                self._load_cached_analyses()
             elif ch in (ord('b'), ord('B')):
                 # Queue brief analysis
                 self._queue_analysis(AnalysisLevel.BRIEF)
             elif ch in (ord('d'), ord('D')):
                 # Queue deep analysis
                 self._queue_analysis(AnalysisLevel.DETAILED)
+            elif ch in (ord('l'), ord('L')):
+                # Toggle detailed view
+                self.mode = "llm_detail" if self.mode != "llm_detail" else "view"
             elif ch in (ord('q'), ord('Q')):
                 # Show queue
                 self.mode = "queue"
@@ -758,34 +769,40 @@ class DocTUIView:
         
         scr.refresh()
     
-    def _load_cached_brief_analysis(self):
-        """Load cached brief analysis if available"""
+    def _load_cached_analyses(self):
+        """Load cached analyses if available"""
         if not self.commits or self.selected_commit_idx < 0:
-            self.current_analysis = None
+            self.current_analyses = {"brief": None, "deep": None}
             self.status = "No commits available"
             return
             
         if self.selected_commit_idx >= len(self.commits) - 1:
             # Last commit - no previous to compare  
-            self.current_analysis = DiffAnalysis(
+            initial_analysis = DiffAnalysis(
                 summary="Initial commit of the repository",
                 change_type=ChangeType.DOCUMENTATION,
                 impact_level="low",
                 confidence=1.0
             )
+            self.current_analyses = {"brief": initial_analysis, "deep": initial_analysis}
             return
         
         # Get commits for diff
         current_commit = self.commits[self.selected_commit_idx]
         prev_commit = self.commits[self.selected_commit_idx + 1]  # Git history is reverse chronological
         
-        # Check cache for brief analysis
-        cache_key = f"{prev_commit.hash}_{current_commit.hash}_{AnalysisLevel.BRIEF.value}"
-        if cache_key in self.llm_cache:
-            self.current_analysis = self.llm_cache[cache_key]
-            self.status = "📦 Using cached brief analysis"
+        # Check cache for both types of analysis
+        brief_key = f"{prev_commit.hash}_{current_commit.hash}_{AnalysisLevel.BRIEF.value}"
+        deep_key = f"{prev_commit.hash}_{current_commit.hash}_{AnalysisLevel.DETAILED.value}"
+        
+        self.current_analyses = {
+            "brief": self.llm_cache.get(brief_key),
+            "deep": self.llm_cache.get(deep_key)
+        }
+        
+        if self.current_analyses["brief"] or self.current_analyses["deep"]:
+            self.status = "📦 Using cached analyses"
         else:
-            self.current_analysis = None
             self.status = "Press B for brief or D for deep analysis"
     
     def _word_wrap(self, text: str, width: int) -> List[str]:
@@ -839,12 +856,12 @@ class DocTUIView:
         context = f"{prev_commit.short_hash}→{current_commit.short_hash}: {current_commit.message[:30]}"
         
         def on_complete(result: DiffAnalysis):
-            # Update current analysis if this is for the selected commit
+            # Update appropriate current analysis if this is for the selected commit
             if self.selected_commit_idx < len(self.commits):
                 selected = self.commits[self.selected_commit_idx]
                 if selected.hash == current_commit.hash:
-                    self.current_analysis = result
-                    self.status = f"✅ Analysis complete: {level.value}"
+                    self.current_analyses[level.value] = result
+                    self.status = f"✅ {level.value.title()} analysis complete"
             
             # Cache the result
             cache_key = f"{prev_commit.hash}_{current_commit.hash}_{level.value}"
