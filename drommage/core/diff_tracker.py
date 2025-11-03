@@ -29,15 +29,18 @@ class Region:
     line_range: Tuple[int, int]  # current position in document
 
 class GitDiffEngine:
-    def __init__(self, docs_dir: Path, versions: List[str]):
-        self.docs_dir = Path(docs_dir)
-        self.versions = versions
+    def __init__(self, docs_dir: Optional[Path] = None, versions: List[str] = None):
+        self.docs_dir = Path(docs_dir) if docs_dir else None
+        self.versions = versions or []
         self.documents: Dict[str, List[str]] = {}
         self.diffs: Dict[Tuple[str, str], List[DiffChunk]] = {}
         self.regions: Dict[str, Region] = {}
         
     def build_index(self):
         """Load all versions and compute structured diffs between them"""
+        if not self.docs_dir or not self.versions:
+            return  # Skip if no docs directory or versions
+            
         # Load all document versions
         for v in self.versions:
             path = self.docs_dir / f"{v}.txt"
