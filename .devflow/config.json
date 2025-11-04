@@ -1,0 +1,14 @@
+{
+  "project_name": "DRommage",
+  "created_at": "2025-11-04T11:10:02.791915",
+  "workflow_type": "standard",
+  "integration": {
+    "drommage": true,
+    "git": true
+  },
+  "preferences": {
+    "auto_link_commits": true,
+    "decision_notifications": true,
+    "daily_standup": false
+  }
+}

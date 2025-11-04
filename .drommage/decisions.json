@@ -1,0 +1,446 @@
+{
+  "24baf4bd": {
+    "id": "24baf4bd",
+    "decision_type": "DecisionType.ANALYSIS",
+    "title": "Created task: Implement task control system for DRommage",
+    "description": "Task d2d75869 created via CLI: Successful integration of TrendDemic protocol into DRommage",
+    "context": {
+      "timestamp": "2025-11-04 10:08:38.672964",
+      "git": {
+        "root": "/Users/j-19group/DRommage",
+        "branch": "main",
+        "remote": "git@github.com:yoursteacup/Drommage.git",
+        "recent_commits": [
+          {
+            "hash": "f765abe9",
+            "message": "docs: Add comprehensive development guide for future Claude sessions",
+            "date": "2025-11-04"
+          },
+          {
+            "hash": "60c4f343",
+            "message": "feat: Add clipboard copy keys and improve UI stability",
+            "date": "2025-11-04"
+          },
+          {
+            "hash": "5fa28e08",
+            "message": "fix: Restore deep analysis display and d/D indicators with animations",
+            "date": "2025-11-03"
+          },
+          {
+            "hash": "38ecce9f",
+            "message": "fix: Restore AI Analysis summary display in small UI panels",
+            "date": "2025-11-03"
+          },
+          {
+            "hash": "90158789",
+            "message": "fix: Show full summary content and preserve diff colors after word wrap",
+            "date": "2025-11-03"
+          }
+        ]
+      },
+      "tasks": {
+        "active_count": 1,
+        "active_tasks": [
+          {
+            "id": "d2d75869",
+            "title": "Implement task control system for DRommage",
+            "status": "pending"
+          }
+        ]
+      }
+    },
+    "timestamp": "2025-11-04 10:08:38.749711",
+    "task_id": "d2d75869",
+    "commit_hash": null,
+    "branch": "main",
+    "phase": null,
+    "tags": [],
+    "related_decisions": []
+  },
+  "adf15f30": {
+    "id": "adf15f30",
+    "decision_type": "DecisionType.ANALYSIS",
+    "title": "Начато выполнение задачи d2d75869",
+    "description": "Инициирована сессия выполнения 0dd4abd7",
+    "context": {
+      "timestamp": "2025-11-04 10:08:50.204847",
+      "git": {
+        "root": "/Users/j-19group/DRommage",
+        "branch": "main",
+        "remote": "git@github.com:yoursteacup/Drommage.git",
+        "recent_commits": [
+          {
+            "hash": "f765abe9",
+            "message": "docs: Add comprehensive development guide for future Claude sessions",
+            "date": "2025-11-04"
+          },
+          {
+            "hash": "60c4f343",
+            "message": "feat: Add clipboard copy keys and improve UI stability",
+            "date": "2025-11-04"
+          },
+          {
+            "hash": "5fa28e08",
+            "message": "fix: Restore deep analysis display and d/D indicators with animations",
+            "date": "2025-11-03"
+          },
+          {
+            "hash": "38ecce9f",
+            "message": "fix: Restore AI Analysis summary display in small UI panels",
+            "date": "2025-11-03"
+          },
+          {
+            "hash": "90158789",
+            "message": "fix: Show full summary content and preserve diff colors after word wrap",
+            "date": "2025-11-03"
+          }
+        ]
+      },
+      "tasks": {
+        "active_count": 1,
+        "active_tasks": [
+          {
+            "id": "d2d75869",
+            "title": "Implement task control system for DRommage",
+            "status": "in_progress"
+          }
+        ]
+      }
+    },
+    "timestamp": "2025-11-04 10:08:50.279750",
+    "task_id": "d2d75869",
+    "commit_hash": null,
+    "branch": "main",
+    "phase": "ExecutionPhase.PLANNING",
+    "tags": [],
+    "related_decisions": []
+  },
+  "6dafeb2c": {
+    "id": "6dafeb2c",
+    "decision_type": "DecisionType.PROBLEM",
+    "title": "Testing protocol system",
+    "description": "Checking if problem reporting works correctly",
+    "context": {
+      "timestamp": "2025-11-04 10:08:55.593416",
+      "git": {
+        "root": "/Users/j-19group/DRommage",
+        "branch": "main",
+        "remote": "git@github.com:yoursteacup/Drommage.git",
+        "recent_commits": [
+          {
+            "hash": "f765abe9",
+            "message": "docs: Add comprehensive development guide for future Claude sessions",
+            "date": "2025-11-04"
+          },
+          {
+            "hash": "60c4f343",
+            "message": "feat: Add clipboard copy keys and improve UI stability",
+            "date": "2025-11-04"
+          },
+          {
+            "hash": "5fa28e08",
+            "message": "fix: Restore deep analysis display and d/D indicators with animations",
+            "date": "2025-11-03"
+          },
+          {
+            "hash": "38ecce9f",
+            "message": "fix: Restore AI Analysis summary display in small UI panels",
+            "date": "2025-11-03"
+          },
+          {
+            "hash": "90158789",
+            "message": "fix: Show full summary content and preserve diff colors after word wrap",
+            "date": "2025-11-03"
+          }
+        ]
+      },
+      "tasks": {
+        "active_count": 2,
+        "active_tasks": [
+          {
+            "id": "d2d75869",
+            "title": "Implement task control system for DRommage",
+            "status": "in_progress"
+          },
+          {
+            "id": "dbc5cc94",
+            "title": "🐛 Testing protocol system",
+            "status": "pending"
+          }
+        ]
+      }
+    },
+    "timestamp": "2025-11-04 10:08:55.671600",
+    "task_id": "dbc5cc94",
+    "commit_hash": null,
+    "branch": "main",
+    "phase": null,
+    "tags": [
+      "problem",
+      "needs_investigation"
+    ],
+    "related_decisions": []
+  },
+  "ef6d67dc": {
+    "id": "ef6d67dc",
+    "decision_type": "DecisionType.SOLUTION",
+    "title": "General solution",
+    "description": "The system works correctly as demonstrated by this test",
+    "context": {
+      "timestamp": "2025-11-04 10:08:59.985485",
+      "git": {
+        "root": "/Users/j-19group/DRommage",
+        "branch": "main",
+        "remote": "git@github.com:yoursteacup/Drommage.git",
+        "recent_commits": [
+          {
+            "hash": "f765abe9",
+            "message": "docs: Add comprehensive development guide for future Claude sessions",
+            "date": "2025-11-04"
+          },
+          {
+            "hash": "60c4f343",
+            "message": "feat: Add clipboard copy keys and improve UI stability",
+            "date": "2025-11-04"
+          },
+          {
+            "hash": "5fa28e08",
+            "message": "fix: Restore deep analysis display and d/D indicators with animations",
+            "date": "2025-11-03"
+          },
+          {
+            "hash": "38ecce9f",
+            "message": "fix: Restore AI Analysis summary display in small UI panels",
+            "date": "2025-11-03"
+          },
+          {
+            "hash": "90158789",
+            "message": "fix: Show full summary content and preserve diff colors after word wrap",
+            "date": "2025-11-03"
+          }
+        ]
+      },
+      "tasks": {
+        "active_count": 2,
+        "active_tasks": [
+          {
+            "id": "d2d75869",
+            "title": "Implement task control system for DRommage",
+            "status": "in_progress"
+          },
+          {
+            "id": "dbc5cc94",
+            "title": "🐛 Testing protocol system",
+            "status": "pending"
+          }
+        ]
+      }
+    },
+    "timestamp": "2025-11-04 10:09:00.067208",
+    "task_id": null,
+    "commit_hash": null,
+    "branch": "main",
+    "phase": null,
+    "tags": [],
+    "related_decisions": []
+  },
+  "0e531d4b": {
+    "id": "0e531d4b",
+    "decision_type": "DecisionType.RESULT",
+    "title": "Task d2d75869 completed",
+    "description": "Task control system successfully implemented and tested",
+    "context": {
+      "timestamp": "2025-11-04 10:09:05.056126",
+      "git": {
+        "root": "/Users/j-19group/DRommage",
+        "branch": "main",
+        "remote": "git@github.com:yoursteacup/Drommage.git",
+        "recent_commits": [
+          {
+            "hash": "f765abe9",
+            "message": "docs: Add comprehensive development guide for future Claude sessions",
+            "date": "2025-11-04"
+          },
+          {
+            "hash": "60c4f343",
+            "message": "feat: Add clipboard copy keys and improve UI stability",
+            "date": "2025-11-04"
+          },
+          {
+            "hash": "5fa28e08",
+            "message": "fix: Restore deep analysis display and d/D indicators with animations",
+            "date": "2025-11-03"
+          },
+          {
+            "hash": "38ecce9f",
+            "message": "fix: Restore AI Analysis summary display in small UI panels",
+            "date": "2025-11-03"
+          },
+          {
+            "hash": "90158789",
+            "message": "fix: Show full summary content and preserve diff colors after word wrap",
+            "date": "2025-11-03"
+          }
+        ]
+      },
+      "tasks": {
+        "active_count": 2,
+        "active_tasks": [
+          {
+            "id": "d2d75869",
+            "title": "Implement task control system for DRommage",
+            "status": "completed"
+          },
+          {
+            "id": "dbc5cc94",
+            "title": "🐛 Testing protocol system",
+            "status": "pending"
+          }
+        ]
+      }
+    },
+    "timestamp": "2025-11-04 10:09:05.129839",
+    "task_id": "d2d75869",
+    "commit_hash": null,
+    "branch": "main",
+    "phase": null,
+    "tags": [],
+    "related_decisions": []
+  },
+  "902550e0": {
+    "id": "902550e0",
+    "decision_type": "DecisionType.ANALYSIS",
+    "title": "Created task: Clean up DRommage architecture",
+    "description": "Task 3284ea89 created via DevFlow: Remove task management integration from DRommage core",
+    "context": {
+      "timestamp": "2025-11-04 11:10:13.164409",
+      "git": {
+        "root": "/Users/j-19group/DRommage",
+        "branch": "main",
+        "remote": "git@github.com:yoursteacup/Drommage.git",
+        "recent_commits": [
+          {
+            "hash": "f765abe9",
+            "message": "docs: Add comprehensive development guide for future Claude sessions",
+            "date": "2025-11-04"
+          },
+          {
+            "hash": "60c4f343",
+            "message": "feat: Add clipboard copy keys and improve UI stability",
+            "date": "2025-11-04"
+          },
+          {
+            "hash": "5fa28e08",
+            "message": "fix: Restore deep analysis display and d/D indicators with animations",
+            "date": "2025-11-03"
+          },
+          {
+            "hash": "38ecce9f",
+            "message": "fix: Restore AI Analysis summary display in small UI panels",
+            "date": "2025-11-03"
+          },
+          {
+            "hash": "90158789",
+            "message": "fix: Show full summary content and preserve diff colors after word wrap",
+            "date": "2025-11-03"
+          }
+        ]
+      },
+      "tasks": {
+        "active_count": 3,
+        "active_tasks": [
+          {
+            "id": "d2d75869",
+            "title": "Implement task control system for DRommage",
+            "status": "completed"
+          },
+          {
+            "id": "3284ea89",
+            "title": "Clean up DRommage architecture",
+            "status": "pending"
+          },
+          {
+            "id": "dbc5cc94",
+            "title": "🐛 Testing protocol system",
+            "status": "pending"
+          }
+        ]
+      }
+    },
+    "timestamp": "2025-11-04 11:10:13.254411",
+    "task_id": "3284ea89",
+    "commit_hash": null,
+    "branch": "main",
+    "phase": null,
+    "tags": [],
+    "related_decisions": []
+  },
+  "eeacbaf6": {
+    "id": "eeacbaf6",
+    "decision_type": "DecisionType.RESULT",
+    "title": "Task 3284ea89 completed",
+    "description": "Successfully separated DevFlow from DRommage - clean architecture achieved",
+    "context": {
+      "timestamp": "2025-11-04 11:10:27.726539",
+      "git": {
+        "root": "/Users/j-19group/DRommage",
+        "branch": "main",
+        "remote": "git@github.com:yoursteacup/Drommage.git",
+        "recent_commits": [
+          {
+            "hash": "f765abe9",
+            "message": "docs: Add comprehensive development guide for future Claude sessions",
+            "date": "2025-11-04"
+          },
+          {
+            "hash": "60c4f343",
+            "message": "feat: Add clipboard copy keys and improve UI stability",
+            "date": "2025-11-04"
+          },
+          {
+            "hash": "5fa28e08",
+            "message": "fix: Restore deep analysis display and d/D indicators with animations",
+            "date": "2025-11-03"
+          },
+          {
+            "hash": "38ecce9f",
+            "message": "fix: Restore AI Analysis summary display in small UI panels",
+            "date": "2025-11-03"
+          },
+          {
+            "hash": "90158789",
+            "message": "fix: Show full summary content and preserve diff colors after word wrap",
+            "date": "2025-11-03"
+          }
+        ]
+      },
+      "tasks": {
+        "active_count": 3,
+        "active_tasks": [
+          {
+            "id": "d2d75869",
+            "title": "Implement task control system for DRommage",
+            "status": "completed"
+          },
+          {
+            "id": "3284ea89",
+            "title": "Clean up DRommage architecture",
+            "status": "completed"
+          },
+          {
+            "id": "dbc5cc94",
+            "title": "🐛 Testing protocol system",
+            "status": "pending"
+          }
+        ]
+      }
+    },
+    "timestamp": "2025-11-04 11:10:27.784840",
+    "task_id": "3284ea89",
+    "commit_hash": null,
+    "branch": "main",
+    "phase": null,
+    "tags": [],
+    "related_decisions": []
+  }
+}

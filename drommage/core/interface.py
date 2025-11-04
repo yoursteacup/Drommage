@@ -9,7 +9,7 @@ from pathlib import Path
 from .diff_tracker import GitDiffEngine
 from .region_analyzer import RegionIndex
 from .llm_analyzer import LLMAnalyzer, AnalysisLevel, DiffAnalysis, ChangeType
-from .analysis_queue import AnalysisQueue, AnalysisTask, TaskStatus
+from .analysis_queue import AnalysisQueue, AnalysisTask, TaskStatus as AnalysisTaskStatus
 from .git_integration import GitIntegration, GitCommit
 import uuid
 import time
@@ -50,7 +50,11 @@ class DocTUIView:
         self.analysis_queue = AnalysisQueue(self.llm)
         self.analysis_queue.start()
         
+        
         self.llm_cache = {}  # Cache for LLM analyses
+        
+        # Initialize cache directory and load existing cache
+        self._init_cache()
         
         # UI state
         self.selected_commit_idx = 0 if commits else -1
@@ -62,6 +66,7 @@ class DocTUIView:
         self.current_analyses = {"brief": None, "deep": None}  # Separate analyses
         self.active_tasks = []  # Track running analysis tasks
         self.animation_frame = 0  # For animated indicators
+        
         
     def run(self):
         # Custom curses wrapper to handle terminal issues
@@ -510,14 +515,14 @@ class DocTUIView:
             y += 1
         
         # Show details if available - with boundary checking
-        if current_analysis.details and y < start_y_brief + h - 2:
+        if current_analysis.details and y < start_y_brief + h - 5:
             y += 1
             scr.addstr(y, x, "Details:", curses.A_BOLD)
             y += 1
             detail_lines = self._word_wrap(current_analysis.details, w - 2)
             # Show detail lines with boundary checking
             for line in detail_lines:
-                if y >= start_y_brief + h - 2:
+                if y >= start_y_brief + h - 3:
                     break
                 try:
                     scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["dim"]))
@@ -582,13 +587,13 @@ class DocTUIView:
             y += 1
             
             # Detailed explanation - with boundary checking
-            if deep_analysis.details and y < start_y + h - 2:
+            if deep_analysis.details and y < start_y + h - 5:  # Extra conservative boundary
                 scr.addstr(y, x, "📝 Details:", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
                 y += 1
                 detail_lines = self._word_wrap(deep_analysis.details, w - 2)
                 # Show detail lines with boundary checking
                 for line in detail_lines:
-                    if y >= start_y + h - 2:
+                    if y >= start_y + h - 3:  # Stop before border
                         break
                     try:
                         scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["dim"]))
@@ -598,15 +603,15 @@ class DocTUIView:
                 y += 1
             
             # Risks - with boundary checking
-            if deep_analysis.risks and y < start_y + h - 1:
+            if deep_analysis.risks and y < start_y + h - 4:
                 scr.addstr(y, x, "⚠️  Risks:", curses.A_BOLD | curses.color_pair(PALETTE["removed"]))
                 y += 1
                 for risk in deep_analysis.risks:
-                    if y >= start_y + h - 1:
+                    if y >= start_y + h - 3:
                         break
                     risk_lines = self._word_wrap(f"• {risk}", w - 2)
                     for line in risk_lines:
-                        if y >= start_y + h - 1:
+                        if y >= start_y + h - 3:
                             break
                         try:
                             scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["removed"]))
@@ -616,15 +621,15 @@ class DocTUIView:
                 y += 1
             
             # Recommendations - with boundary checking
-            if deep_analysis.recommendations and y < start_y + h - 1:
+            if deep_analysis.recommendations and y < start_y + h - 4:
                 scr.addstr(y, x, "💡 Recommendations:", curses.A_BOLD | curses.color_pair(PALETTE["added"]))
                 y += 1
                 for rec in deep_analysis.recommendations:
-                    if y >= start_y + h - 1:
+                    if y >= start_y + h - 3:
                         break
                     rec_lines = self._word_wrap(f"• {rec}", w - 2)
                     for line in rec_lines:
-                        if y >= start_y + h - 1:
+                        if y >= start_y + h - 3:
                             break
                         try:
                             scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["added"]))
@@ -915,6 +920,7 @@ class DocTUIView:
             # Return to main view on any key
             self.mode = "view"
         
+        
         return True
     
     def _analyze_current_version(self, level: AnalysisLevel, scr=None):
@@ -1113,6 +1119,8 @@ class DocTUIView:
                 # Cache first
                 cache_key = f"{prev_commit.hash}_{current_commit.hash}_{level.value}"
                 self.llm_cache[cache_key] = result
+                # Save cache to disk
+                self._save_cache()
                 
                 # ПРИНУДИТЕЛЬНО обновить current_analyses прямо сейчас
                 if self.selected_commit_idx < len(self.commits):
@@ -1129,40 +1137,14 @@ class DocTUIView:
                         # Clear status so analysis shows in panel, not status bar
                         self.status = ""
                 
-                # ПРИНУДИТЕЛЬНО обновить весь интерфейс
-                if hasattr(self, 'scr') and self.scr:
-                    try:
-                        h, w = self.scr.getmaxyx()
-                        left_width = int(w * 0.382)
-                        top_height = int(h * 0.45)
-                        bottom_height = h - top_height - 2
-                        
-                        # Обновить панель анализа
-                        if self.mode == "llm_detail":
-                            self._draw_llm_deep_analysis(self.scr, top_height + 1, 2, left_width - 3, bottom_height - 2)
-                        else:
-                            self._draw_llm_analysis_panel(self.scr, top_height + 1, 2, left_width - 3, bottom_height - 2)
-                        
-                        # Обновить панель коммитов для показа индикаторов
-                        self._draw_history_panel(self.scr, 2, 2, left_width - 3, top_height - 3)
-                        
-                        self.scr.refresh()
-                    except:
-                        pass
+                # Let the main loop handle display updates to avoid overlapping draws
                     
             except Exception as e:
                 self.status = f"❌ Callback error: {str(e)[:40]}"
         
         def status_update(msg: str):
             self.status = msg
-            # Force UI refresh during analysis for real-time feedback
-            if hasattr(self, 'scr') and self.scr:
-                try:
-                    h, w = self.scr.getmaxyx()
-                    self._draw_status_bar(self.scr, h - 1, w)
-                    self.scr.refresh()
-                except:
-                    pass
+            # Let main loop handle UI updates for smoother experience
         
         # Get file contents for proper analysis
         prev_content = ""
@@ -1342,3 +1324,84 @@ class DocTUIView:
         text = "\n".join(lines)
         if self._copy_to_clipboard(text):
             self.status = "📋 Copied diff to clipboard"
+    
+    def _init_cache(self):
+        """Initialize cache directory and load existing cache from disk"""
+        import json
+        from pathlib import Path
+        
+        # Create cache directory if it doesn't exist
+        self.cache_dir = Path(".drommage")
+        self.cache_dir.mkdir(exist_ok=True)
+        
+        # Cache file path
+        self.cache_file = self.cache_dir / "llm_cache.json"
+        
+        # Load existing cache
+        self._load_cache()
+        
+        # Save initial empty cache if doesn't exist
+        if not self.cache_file.exists():
+            self._save_cache()
+    
+    def _load_cache(self):
+        """Load LLM cache from disk"""
+        import json
+        
+        try:
+            if self.cache_file.exists():
+                with open(self.cache_file, 'r', encoding='utf-8') as f:
+                    self.llm_cache = json.load(f)
+                    # Convert string values back to DiffAnalysis objects
+                    from drommage.core.llm_analyzer import DiffAnalysis, ChangeType
+                    for key, data in self.llm_cache.items():
+                        if isinstance(data, dict) and 'summary' in data:
+                            try:
+                                # Reconstruct DiffAnalysis object
+                                analysis = DiffAnalysis(
+                                    summary=data.get('summary', ''),
+                                    change_type=ChangeType(data.get('change_type', 'UNKNOWN')),
+                                    impact_level=data.get('impact_level', 'low'),
+                                    confidence=data.get('confidence', 0.0),
+                                    details=data.get('details', ''),
+                                    risks=data.get('risks', []),
+                                    recommendations=data.get('recommendations', [])
+                                )
+                                self.llm_cache[key] = analysis
+                            except Exception as e:
+                                # Remove corrupted cache entries
+                                del self.llm_cache[key]
+                print(f"📦 Loaded {len(self.llm_cache)} cached analyses")
+            else:
+                self.llm_cache = {}
+                print("📦 No existing cache found, starting fresh")
+        except Exception as e:
+            print(f"❌ Error loading cache: {e}")
+            self.llm_cache = {}
+    
+    def _save_cache(self):
+        """Save LLM cache to disk"""
+        import json
+        
+        try:
+            # Convert DiffAnalysis objects to dicts for JSON serialization
+            cache_data = {}
+            for key, analysis in self.llm_cache.items():
+                if hasattr(analysis, 'summary'):  # It's a DiffAnalysis object
+                    cache_data[key] = {
+                        'summary': analysis.summary,
+                        'change_type': analysis.change_type.value if hasattr(analysis.change_type, 'value') else str(analysis.change_type),
+                        'impact_level': analysis.impact_level,
+                        'confidence': analysis.confidence,
+                        'details': getattr(analysis, 'details', ''),
+                        'risks': getattr(analysis, 'risks', []),
+                        'recommendations': getattr(analysis, 'recommendations', [])
+                    }
+                else:
+                    cache_data[key] = analysis  # Already serializable
+            
+            with open(self.cache_file, 'w', encoding='utf-8') as f:
+                json.dump(cache_data, f, indent=2, ensure_ascii=False)
+            print(f"💾 Saved {len(cache_data)} analyses to cache")
+        except Exception as e:
+            print(f"❌ Error saving cache: {e}")
