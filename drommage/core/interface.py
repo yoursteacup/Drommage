@@ -62,6 +62,7 @@ class DocTUIView:
         self.mode = "view"  # view, region_detail, llm_detail, queue
         self.right_scroll = 0
         self.commit_scroll = 0  # Horizontal scroll for commit list
+        self.commit_page_offset = 0  # Current page offset for commits
         self.status = ""
         self.current_analyses = {"brief": None, "deep": None}  # Separate analyses
         self.active_tasks = []  # Track running analysis tasks
@@ -267,8 +268,15 @@ class DocTUIView:
             scr.addstr(y, x, "🔄 Queue: empty", curses.color_pair(PALETTE["dim"]))
         y += 2
         
-        for i, commit in enumerate(self.commits[:h-4]):
-            if i == self.selected_commit_idx:
+        # Show commits with pagination
+        commits_per_page = h - 4
+        start_idx = self.commit_page_offset
+        end_idx = min(start_idx + commits_per_page, len(self.commits))
+        page_commits = self.commits[start_idx:end_idx]
+        
+        for display_idx, commit in enumerate(page_commits):
+            actual_idx = start_idx + display_idx
+            if actual_idx == self.selected_commit_idx:
                 attr = curses.color_pair(PALETTE["selected"])
                 prefix = "▶"
             else:
@@ -289,8 +297,8 @@ class DocTUIView:
             
             # Get analysis status for this commit with exact pattern matching
             prev_short_hash = None
-            if i < len(self.commits) - 1:
-                prev_short_hash = self.commits[i + 1].short_hash
+            if actual_idx < len(self.commits) - 1:
+                prev_short_hash = self.commits[actual_idx + 1].short_hash
             
             analysis_status = self.analysis_queue.get_commit_analysis_status(
                 commit.hash, commit.short_hash, prev_short_hash)
@@ -298,14 +306,14 @@ class DocTUIView:
             deep_status = analysis_status.get("deep")
             
             # Also check cache for completed analyses
-            if not brief_status and i < len(self.commits) - 1:
-                prev_hash = self.commits[i+1].hash
+            if not brief_status and actual_idx < len(self.commits) - 1:
+                prev_hash = self.commits[actual_idx+1].hash
                 brief_key = f"{prev_hash}_{commit.hash}_brief"
                 if brief_key in self.llm_cache:
                     brief_status = "completed"
                     
-            if not deep_status and i < len(self.commits) - 1:
-                prev_hash = self.commits[i+1].hash  
+            if not deep_status and actual_idx < len(self.commits) - 1:
+                prev_hash = self.commits[actual_idx+1].hash  
                 deep_key = f"{prev_hash}_{commit.hash}_detailed"
                 if deep_key in self.llm_cache:
                     deep_status = "completed"
@@ -317,14 +325,14 @@ class DocTUIView:
             if brief_status:
                 # Brief analysis - use lowercase d
                 brief_indicator = self._get_status_indicator(brief_status, "d")
-            elif i == self.selected_commit_idx:
+            elif actual_idx == self.selected_commit_idx:
                 # Show default button for selected commit
                 brief_indicator = " d "
             
             if deep_status:
                 # Deep analysis - use uppercase D  
                 deep_indicator = self._get_status_indicator(deep_status, "D")
-            elif i == self.selected_commit_idx:
+            elif actual_idx == self.selected_commit_idx:
                 # Always show D button for selected commit (regardless of brief status)
                 deep_indicator = " D "
             
@@ -356,7 +364,7 @@ class DocTUIView:
                 line = full_line
             
             try:
-                scr.addnstr(y + i, x, line[:w], w, attr)
+                scr.addnstr(y + display_idx, x, line[:w], w, attr)
             except:
                 pass
     
@@ -859,11 +867,39 @@ class DocTUIView:
         
         if self.mode == "view":
             if ch in (curses.KEY_UP, ord('k')):
-                self.selected_commit_idx = max(0, self.selected_commit_idx - 1)
+                # Циклическая навигация вверх
+                page_size = 10  # Approximate page size
+                current_page_start = self.commit_page_offset
+                relative_pos = self.selected_commit_idx - current_page_start
+                
+                if relative_pos > 0:
+                    # Просто идем вверх внутри страницы
+                    self.selected_commit_idx -= 1
+                else:
+                    # Переходим на предыдущую страницу в конец
+                    if current_page_start > 0:
+                        self.commit_page_offset = max(0, current_page_start - page_size)
+                        new_page_end = min(self.commit_page_offset + page_size - 1, len(self.commits) - 1)
+                        self.selected_commit_idx = new_page_end
+                
                 self.right_scroll = 0
                 self._load_cached_analyses()
+                
             elif ch in (curses.KEY_DOWN, ord('j')):
-                self.selected_commit_idx = min(len(self.commits) - 1, self.selected_commit_idx + 1)
+                # Циклическая навигация вниз  
+                page_size = 10  # Approximate page size
+                current_page_start = self.commit_page_offset
+                current_page_end = min(current_page_start + page_size - 1, len(self.commits) - 1)
+                
+                if self.selected_commit_idx < current_page_end:
+                    # Просто идем вниз внутри страницы
+                    self.selected_commit_idx += 1
+                else:
+                    # Переходим на следующую страницу в начало
+                    if current_page_end < len(self.commits) - 1:
+                        self.commit_page_offset = min(current_page_start + page_size, len(self.commits) - 1)
+                        self.selected_commit_idx = self.commit_page_offset
+                
                 self.right_scroll = 0
                 self._load_cached_analyses()
             elif ch in (ord('d'), ord('D')):
