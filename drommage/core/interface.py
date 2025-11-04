@@ -13,6 +13,7 @@ from .analysis_queue import AnalysisQueue, AnalysisTask, TaskStatus
 from .git_integration import GitIntegration, GitCommit
 import uuid
 import time
+import subprocess
 
 # Enhanced color palette
 PALETTE = {
@@ -404,11 +405,13 @@ class DocTUIView:
     
     def _draw_llm_analysis_panel(self, scr, y, x, w, h):
         """Draw LLM analysis of current commit changes"""
-        # CLEAR the panel area first to prevent text overlap
-        for clear_y in range(y, y + h):
+        # CLEAR only the content area, not the borders
+        for clear_y in range(y, y + h - 1):  # Don't clear the bottom border
             try:
                 scr.move(clear_y, x)
-                scr.clrtoeol()
+                # Clear only the content area, leave space for right border
+                for clear_x in range(x, x + w - 1):
+                    scr.addch(clear_y, clear_x, ' ')
             except:
                 pass
         
@@ -491,8 +494,11 @@ class DocTUIView:
         
         if current_analysis.summary:
             summary_lines = self._word_wrap(current_analysis.summary, w - 2)
-            # Show summary lines without restrictive breaks
-            for line in summary_lines[:8]:  # Show up to 8 lines like working version
+            # Show summary lines with boundary checking
+            start_y_brief = y - 3  # Approximate start of panel
+            for line in summary_lines:
+                if y >= start_y_brief + h - 3:  # Leave space for details
+                    break
                 try:
                     scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["llm_summary"]))
                     y += 1
@@ -503,15 +509,21 @@ class DocTUIView:
             scr.addstr(y, x, "⚠️ No summary available", curses.color_pair(PALETTE["dim"]))
             y += 1
         
-        # Show details if available
-        if current_analysis.details and y < h - 3:
+        # Show details if available - with boundary checking
+        if current_analysis.details and y < start_y_brief + h - 2:
             y += 1
             scr.addstr(y, x, "Details:", curses.A_BOLD)
             y += 1
             detail_lines = self._word_wrap(current_analysis.details, w - 2)
-            for line in detail_lines[:h - y - 2]:
-                scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["dim"]))
-                y += 1
+            # Show detail lines with boundary checking
+            for line in detail_lines:
+                if y >= start_y_brief + h - 2:
+                    break
+                try:
+                    scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["dim"]))
+                    y += 1
+                except:
+                    break
         
         # Hint for switching analysis type
         if y < h - 1:
@@ -527,6 +539,7 @@ class DocTUIView:
     
     def _draw_llm_deep_analysis(self, scr, y, x, w, h):
         """Show detailed LLM analysis"""
+        start_y = y  # Remember starting position for boundary checks
         scr.addstr(y, x, "🔍 Deep Analysis", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
         y += 2
         
@@ -554,8 +567,10 @@ class DocTUIView:
             
             if deep_analysis.summary:
                 summary_lines = self._word_wrap(deep_analysis.summary, w - 2)
-                # Show summary lines without restrictive breaks (like brief analysis)
-                for line in summary_lines[:15]:  # Show up to 15 lines for deep
+                # Show summary lines with boundary checking
+                for line in summary_lines:
+                    if y >= start_y + h - 3:  # Leave space for other sections
+                        break
                     try:
                         scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["llm_summary"]))
                         y += 1
@@ -566,40 +581,56 @@ class DocTUIView:
                 y += 1
             y += 1
             
-            # Detailed explanation
-            if deep_analysis.details and y < h - 1:
+            # Detailed explanation - with boundary checking
+            if deep_analysis.details and y < start_y + h - 2:
                 scr.addstr(y, x, "📝 Details:", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
                 y += 1
                 detail_lines = self._word_wrap(deep_analysis.details, w - 2)
-                for line in detail_lines[:15]:  # Show more detail lines
-                    if y >= h - 1:
+                # Show detail lines with boundary checking
+                for line in detail_lines:
+                    if y >= start_y + h - 2:
                         break
-                    scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["dim"]))
-                    y += 1
+                    try:
+                        scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["dim"]))
+                        y += 1
+                    except:
+                        break
                 y += 1
             
-            # Risks
-            if deep_analysis.risks and y < h - 4:
+            # Risks - with boundary checking
+            if deep_analysis.risks and y < start_y + h - 1:
                 scr.addstr(y, x, "⚠️  Risks:", curses.A_BOLD | curses.color_pair(PALETTE["removed"]))
                 y += 1
-                for risk in deep_analysis.risks[:2]:
+                for risk in deep_analysis.risks:
+                    if y >= start_y + h - 1:
+                        break
                     risk_lines = self._word_wrap(f"• {risk}", w - 2)
-                    for line in risk_lines[:2]:
-                        if y < h - 3:
+                    for line in risk_lines:
+                        if y >= start_y + h - 1:
+                            break
+                        try:
                             scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["removed"]))
                             y += 1
+                        except:
+                            break
                 y += 1
             
-            # Recommendations
-            if deep_analysis.recommendations and y < h - 3:
+            # Recommendations - with boundary checking
+            if deep_analysis.recommendations and y < start_y + h - 1:
                 scr.addstr(y, x, "💡 Recommendations:", curses.A_BOLD | curses.color_pair(PALETTE["added"]))
                 y += 1
-                for rec in deep_analysis.recommendations[:2]:
+                for rec in deep_analysis.recommendations:
+                    if y >= start_y + h - 1:
+                        break
                     rec_lines = self._word_wrap(f"• {rec}", w - 2)
-                    for line in rec_lines[:2]:
-                        if y < h - 2:
+                    for line in rec_lines:
+                        if y >= start_y + h - 1:
+                            break
+                        try:
                             scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["added"]))
                             y += 1
+                        except:
+                            break
         else:
             # No analysis available
             scr.addstr(y, x, "⏳ No analysis available yet", curses.color_pair(PALETTE["dim"]))
@@ -782,7 +813,10 @@ class DocTUIView:
                 ("D", "analyze/toggle"),
                 ("Q", "queue/quit"),
                 ("R", "regions"),
-                ("←→/hl", "scroll")
+                ("←→/hl", "scroll"),
+                ("i", "copy commits"),
+                ("o", "copy analysis"),
+                ("p", "copy diff")
             ]
         elif self.mode == "queue":
             help_items = [
@@ -848,6 +882,12 @@ class DocTUIView:
                 self.commit_scroll += 5
             elif ch == ord('H'):  # Shift+H - scroll commits left  
                 self.commit_scroll = max(0, self.commit_scroll - 5)
+            elif ch == ord('i'):  # Copy commits to clipboard
+                self._copy_commits()
+            elif ch == ord('o'):  # Copy analysis to clipboard
+                self._copy_analysis()
+            elif ch == ord('p'):  # Copy diff to clipboard
+                self._copy_diff()
         
         elif self.mode == "llm_detail":
             # Allow navigation in deep mode
@@ -1192,3 +1232,113 @@ class DocTUIView:
                 self.status = "📊 Showing deep analysis"
             # Force refresh of current analyses
             self._load_cached_analyses()
+    
+    def _copy_to_clipboard(self, text: str):
+        """Copy text to system clipboard"""
+        try:
+            # Try different clipboard commands
+            if subprocess.run(["which", "pbcopy"], capture_output=True).returncode == 0:
+                # macOS
+                subprocess.run(["pbcopy"], input=text.encode(), check=True)
+            elif subprocess.run(["which", "xclip"], capture_output=True).returncode == 0:
+                # Linux with xclip
+                subprocess.run(["xclip", "-selection", "clipboard"], input=text.encode(), check=True)
+            elif subprocess.run(["which", "xsel"], capture_output=True).returncode == 0:
+                # Linux with xsel
+                subprocess.run(["xsel", "--clipboard", "--input"], input=text.encode(), check=True)
+            else:
+                self.status = "❌ No clipboard utility found (install pbcopy/xclip/xsel)"
+                return False
+            return True
+        except Exception as e:
+            self.status = f"❌ Copy failed: {str(e)[:30]}"
+            return False
+    
+    def _copy_commits(self):
+        """Copy commit list to clipboard (i key)"""
+        if not self.commits:
+            self.status = "❌ No commits to copy"
+            return
+            
+        lines = []
+        for commit in self.commits:
+            lines.append(f"{commit.short_hash} {commit.message}")
+        
+        text = "\n".join(lines)
+        if self._copy_to_clipboard(text):
+            self.status = f"📋 Copied {len(self.commits)} commits to clipboard"
+    
+    def _copy_analysis(self):
+        """Copy current analysis to clipboard (o key)"""
+        if not self.current_analyses:
+            self.status = "❌ No analysis to copy"
+            return
+            
+        lines = []
+        
+        # Add brief if available
+        brief = self.current_analyses.get("brief")
+        if brief:
+            lines.append("=== BRIEF ANALYSIS ===")
+            lines.append(f"Summary: {brief.summary}")
+            lines.append(f"Type: {brief.change_type.name}")
+            lines.append(f"Impact: {brief.impact_level}")
+            if brief.details:
+                lines.append(f"Details: {brief.details}")
+            lines.append("")
+        
+        # Add deep if available  
+        deep = self.current_analyses.get("deep")
+        if deep:
+            lines.append("=== DEEP ANALYSIS ===")
+            lines.append(f"Summary: {deep.summary}")
+            lines.append(f"Type: {deep.change_type.name}")
+            lines.append(f"Impact: {deep.impact_level}")
+            if deep.details:
+                lines.append(f"Details: {deep.details}")
+            if deep.risks:
+                lines.append("Risks:")
+                for risk in deep.risks:
+                    lines.append(f"  - {risk}")
+            if deep.recommendations:
+                lines.append("Recommendations:")
+                for rec in deep.recommendations:
+                    lines.append(f"  - {rec}")
+        
+        text = "\n".join(lines)
+        if self._copy_to_clipboard(text):
+            self.status = "📋 Copied analysis to clipboard"
+    
+    def _copy_diff(self):
+        """Copy current diff to clipboard (p key)"""
+        if self.selected_commit_idx < 0 or self.selected_commit_idx >= len(self.commits):
+            self.status = "❌ No commit selected"
+            return
+            
+        current_commit = self.commits[self.selected_commit_idx]
+        
+        # Get previous commit for diff
+        if self.selected_commit_idx < len(self.commits) - 1:
+            prev_commit = self.commits[self.selected_commit_idx + 1]
+        else:
+            self.status = "❌ No previous commit for diff"
+            return
+        
+        # Get diff
+        diff = self.git.get_commit_diff(prev_commit.hash, current_commit.hash)
+        if not diff or not diff.diff_text:
+            self.status = "❌ No diff available"
+            return
+        
+        # Format diff with header
+        lines = [
+            f"Commit: {current_commit.short_hash} {current_commit.message}",
+            f"Author: {current_commit.author}",
+            f"Date: {current_commit.date}",
+            "",
+            diff.diff_text
+        ]
+        
+        text = "\n".join(lines)
+        if self._copy_to_clipboard(text):
+            self.status = "📋 Copied diff to clipboard"

@@ -299,7 +299,21 @@ Provide detailed analysis as JSON:
         else:
             # Try to parse JSON response
             try:
-                data = json.loads(response)
+                # Extract JSON from markdown code blocks if present
+                json_text = response.strip()
+                
+                # Remove markdown code fences
+                if json_text.startswith('```json'):
+                    json_text = json_text[7:]  # Remove ```json
+                elif json_text.startswith('```'):
+                    json_text = json_text[3:]   # Remove ```
+                    
+                if json_text.endswith('```'):
+                    json_text = json_text[:-3]  # Remove ending ```
+                    
+                json_text = json_text.strip()
+                
+                data = json.loads(json_text)
                 
                 # Handle different key formats (lowercase, Title Case, etc.)
                 # Try multiple key variations
@@ -334,12 +348,19 @@ Provide detailed analysis as JSON:
                          data.get("impact") or 
                          "low").lower()
                 
-                # Get details from various keys
-                details = (data.get("details") or 
-                          data.get("Details") or
-                          data.get("What specifically changed and why it matters") or
-                          data.get("4. What specifically changed and why it matters") or
-                          data.get("semantic_changes"))
+                # Get details from various keys - avoid embedding raw JSON  
+                details_raw = (data.get("details") or 
+                              data.get("Details") or
+                              data.get("What specifically changed and why it matters") or
+                              data.get("4. What specifically changed and why it matters") or
+                              data.get("semantic_changes"))
+                
+                # Clean details - don't include JSON-like content
+                details = None
+                if details_raw and isinstance(details_raw, str):
+                    # Skip if it looks like embedded JSON
+                    if not (details_raw.strip().startswith('{') and details_raw.strip().endswith('}')):
+                        details = details_raw
                 
                 # Get risks and recommendations
                 risks = data.get("risks") or data.get("Risks")
