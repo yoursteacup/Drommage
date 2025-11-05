@@ -67,6 +67,8 @@ class DocTUIView:
         self.current_analyses = {"brief": None, "deep": None}  # Separate analyses
         self.active_tasks = []  # Track running analysis tasks
         self.animation_frame = 0  # For animated indicators
+        self.page_flip_animation = {"active": False, "start_time": 0, "direction": ""}  # Page flip animation
+        self.analysis_scroll = 0  # Scroll position for analysis panel
         
         
     def run(self):
@@ -257,23 +259,49 @@ class DocTUIView:
             self._draw_queue_panel(scr, y, x, w, h)
             return
             
-        scr.addstr(y, x, "📚 Git Commits", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
+        # Handle page flip animation
+        import time
+        animation_icon = "📚"
+        if self.page_flip_animation["active"]:
+            elapsed = time.time() - self.page_flip_animation["start_time"]
+            if elapsed < 0.25:
+                # Show animation
+                direction = self.page_flip_animation["direction"]
+                if direction == "up":
+                    animation_icon = "📖" if elapsed < 0.125 else "📗"
+                else:  # down
+                    animation_icon = "📘" if elapsed < 0.125 else "📙"
+            else:
+                # Animation complete
+                self.page_flip_animation["active"] = False
+        
+        scr.addstr(y, x, f"{animation_icon} Git Commits", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
         y += 1
         
-        # Show queue status
-        queue_size = self.analysis_queue.get_queue_size()
-        if queue_size > 0:
-            scr.addstr(y, x, f"🔄 Queue: {queue_size} tasks", curses.color_pair(PALETTE["modified"]))
-        else:
-            scr.addstr(y, x, "🔄 Queue: empty", curses.color_pair(PALETTE["dim"]))
+        # Calculate actual available display space
+        # y starts at panel top + title (1) + pagination (potentially 1) + spacing (1) = y + 3
+        # Available lines = panel bottom - current y position - border space
+        available_lines = h - 4  # Reserve space for borders and avoid overflow
+        commits_per_page = available_lines  # This should match the display break condition
+        total_pages = (len(self.commits) + commits_per_page - 1) // commits_per_page if self.commits else 1
+        current_page = (self.commit_page_offset // commits_per_page) + 1
+        
+        if total_pages > 1:
+            page_icon = "📄"
+            if self.page_flip_animation["active"]:
+                # Show flip animation in pagination too
+                page_icon = "📃" if (time.time() - self.page_flip_animation["start_time"]) < 0.125 else "📋"
+            scr.addstr(y, x, f"{page_icon} Page {current_page}/{total_pages}", curses.color_pair(PALETTE["dim"]))
         y += 2
         
-        # Show commits with pagination
-        commits_per_page = h - 4
+        # Show commits with pagination - use actual available space
         start_idx = self.commit_page_offset
-        end_idx = min(start_idx + commits_per_page, len(self.commits))
+        # Ensure we don't slice more commits than we can actually display
+        displayable_commits = min(commits_per_page, available_lines, len(self.commits) - start_idx)
+        end_idx = start_idx + displayable_commits
         page_commits = self.commits[start_idx:end_idx]
         
+        # Now page_commits contains exactly the right number of commits to display
         for display_idx, commit in enumerate(page_commits):
             actual_idx = start_idx + display_idx
             if actual_idx == self.selected_commit_idx:
@@ -363,10 +391,12 @@ class DocTUIView:
             else:
                 line = full_line
             
-            try:
-                scr.addnstr(y + display_idx, x, line[:w], w, attr)
-            except:
-                pass
+            # Only display if we have space
+            if y + display_idx < y + available_lines:
+                try:
+                    scr.addnstr(y + display_idx, x, line[:w], w, attr)
+                except:
+                    pass
     
     def _get_status_indicator(self, status: str, button_type: str) -> str:
         """Generate animated status indicator for analysis buttons (B/D)"""
@@ -429,7 +459,7 @@ class DocTUIView:
                 pass
         
         if not self.commits or self.selected_commit_idx < 0:
-            scr.addstr(y, x, "🤖 AI Analysis", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
+            scr.addstr(y, x, "📝 Brief Analysis", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
             y += 2
             scr.addstr(y, x, "No commits available", curses.color_pair(PALETTE["dim"]))
             return
@@ -437,7 +467,7 @@ class DocTUIView:
         current_commit = self.commits[self.selected_commit_idx]
         
         # Header
-        scr.addstr(y, x, "🤖 AI Analysis", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
+        scr.addstr(y, x, "📝 Brief Analysis", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
         y += 2
         
         # Check if we're currently analyzing
@@ -460,8 +490,14 @@ class DocTUIView:
                 if current_analysis:
                     analysis_type = "deep"
         
-        if is_analyzing and not current_analysis:
-            # Show analysis in progress
+        # Check if the requested analysis type is currently running
+        is_current_type_running = self._is_analysis_type_running(analysis_type)
+        
+        if is_current_type_running and not current_analysis:
+            # Show analysis in progress for this specific type
+            type_label = "📊 Deep Analysis" if analysis_type == "deep" else "📝 Brief Analysis"
+            scr.addstr(y, x, type_label, curses.color_pair(PALETTE["icon"]) | curses.A_BOLD)
+            y += 1
             scr.addstr(y, x, "⏳ Analysis in progress...", curses.color_pair(PALETTE["modified"]) | curses.A_BOLD)
             y += 2
             
@@ -481,16 +517,15 @@ class DocTUIView:
             self._draw_no_analysis_message(scr, y, x, w, h)
             return
             
-        # Show change type icon  
-        # DEBUG: Check what's in change_type
+        # Type
         try:
-            type_text = f"{current_analysis.change_type.value} Type: {current_analysis.change_type.name}"
+            type_text = f"Type: {current_analysis.change_type.name}"
         except:
-            type_text = f"❓ Type: UNKNOWN (error accessing change_type)"
+            type_text = "Type: UNKNOWN"
         scr.addstr(y, x, type_text, curses.color_pair(PALETTE["icon"]))
         y += 1
         
-        # Impact level with visual indicator
+        # Impact
         impact_bars = {"low": "▁▁▁", "medium": "▃▃▃", "high": "▇▇▇"}
         impact_color = {"low": PALETTE["stable"], "medium": PALETTE["modified"], "high": PALETTE["volatile"]}
         bars = impact_bars.get(current_analysis.impact_level, "▁▁▁")
@@ -505,38 +540,79 @@ class DocTUIView:
         
         # Word wrap summary
         
+        # Collect all content lines for scrolling
+        all_content_lines = []
+        
+        # Summary
         if current_analysis.summary:
             summary_lines = self._word_wrap(current_analysis.summary, w - 2)
-            # Show summary lines with boundary checking
-            start_y_brief = y - 3  # Approximate start of panel
-            for line in summary_lines:
-                if y >= start_y_brief + h - 3:  # Leave space for details
-                    break
-                try:
-                    scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["llm_summary"]))
-                    y += 1
-                except:
-                    break
+            all_content_lines.extend(summary_lines)
         else:
-            # Summary is empty
-            scr.addstr(y, x, "⚠️ No summary available", curses.color_pair(PALETTE["dim"]))
-            y += 1
+            all_content_lines.append("⚠️ No summary available")
         
-        # Show details if available - with boundary checking
-        if current_analysis.details and y < start_y_brief + h - 5:
-            y += 1
-            scr.addstr(y, x, "Details:", curses.A_BOLD)
-            y += 1
+        # Details
+        if current_analysis.details:
+            all_content_lines.append("")  # Empty line separator
+            all_content_lines.append("Details:")
             detail_lines = self._word_wrap(current_analysis.details, w - 2)
-            # Show detail lines with boundary checking
-            for line in detail_lines:
-                if y >= start_y_brief + h - 3:
-                    break
-                try:
-                    scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["dim"]))
+            all_content_lines.extend(detail_lines)
+        
+        # Risks
+        if hasattr(current_analysis, 'risks') and current_analysis.risks:
+            all_content_lines.append("")  # Empty line separator
+            all_content_lines.append("Risks:")
+            for risk in current_analysis.risks[:2]:  # Limit to 2 risks in brief view
+                risk_lines = self._word_wrap(f"• {risk}", w - 2)
+                all_content_lines.extend(risk_lines)
+        
+        # Apply scroll and display
+        start_y_brief = y - 3  # Approximate start of panel
+        scrolled_lines = all_content_lines[self.analysis_scroll:] if self.analysis_scroll < len(all_content_lines) else []
+        
+        # Calculate line number width (for total lines, not just visible)
+        total_lines = len(all_content_lines)
+        line_num_width = len(str(total_lines)) + 1  # +1 for space
+        content_width = w - line_num_width - 1  # -1 for separator
+        
+        for i, line in enumerate(scrolled_lines):
+            if y >= start_y_brief + h - 2:  # Leave space only for border and scroll indicator at very bottom
+                break
+            try:
+                # Calculate actual line number (accounting for scroll)
+                actual_line_num = self.analysis_scroll + i + 1
+                line_num_str = f"{actual_line_num:>{line_num_width-1}} "
+                
+                # Draw line number
+                scr.addstr(y, x, line_num_str, curses.color_pair(PALETTE["dim"]))
+                
+                # Draw separator
+                scr.addstr(y, x + line_num_width, "│", curses.color_pair(PALETTE["border"]))
+                
+                # Skip empty lines for display but keep line numbers
+                if line == "":
                     y += 1
-                except:
-                    break
+                    continue
+                
+                # Draw content with adjusted position and width
+                content_x = x + line_num_width + 1
+                
+                # Color based on content type
+                if line.startswith("Details:"):
+                    scr.addnstr(y, content_x, line, content_width, curses.A_BOLD)
+                elif line.startswith("Risks:"):
+                    scr.addnstr(y, content_x, line, content_width, curses.A_BOLD | curses.color_pair(PALETTE["removed"]))
+                elif line.startswith("•"):
+                    scr.addnstr(y, content_x, line, content_width, curses.color_pair(PALETTE["removed"]))
+                elif line.startswith("⚠️"):
+                    scr.addnstr(y, content_x, line, content_width, curses.color_pair(PALETTE["dim"]))
+                else:
+                    scr.addnstr(y, content_x, line, content_width, curses.color_pair(PALETTE["llm_summary"]))
+                y += 1
+            except:
+                break
+        
+        # Draw scroll indicator at very bottom of panel
+        self._draw_analysis_scroll_indicator(scr, start_y_brief + h - 1, x, w, all_content_lines, current_analysis)
         
         # Hint for switching analysis type
         if y < h - 1:
@@ -553,19 +629,22 @@ class DocTUIView:
     def _draw_llm_deep_analysis(self, scr, y, x, w, h):
         """Show detailed LLM analysis"""
         start_y = y  # Remember starting position for boundary checks
-        scr.addstr(y, x, "🔍 Deep Analysis", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
+        scr.addstr(y, x, "📊 Deep Analysis", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
         y += 2
         
         # Get deep analysis specifically
         deep_analysis = self.current_analyses.get("deep")
         
         if deep_analysis:
-            # Show change type and impact
-            scr.addstr(y, x, f"{deep_analysis.change_type.value} Type: {deep_analysis.change_type.name}", 
-                      curses.color_pair(PALETTE["icon"]))
+            # Type
+            try:
+                type_text = f"Type: {deep_analysis.change_type.name}"
+            except:
+                type_text = "Type: UNKNOWN"
+            scr.addstr(y, x, type_text, curses.color_pair(PALETTE["icon"]))
             y += 1
             
-            # Impact level
+            # Impact
             impact_bars = {"low": "▁▁▁", "medium": "▃▃▃", "high": "▇▇▇"}
             impact_color = {"low": PALETTE["stable"], "medium": PALETTE["modified"], "high": PALETTE["volatile"]}
             bars = impact_bars.get(deep_analysis.impact_level, "▁▁▁")
@@ -574,76 +653,90 @@ class DocTUIView:
                       curses.color_pair(color))
             y += 2
             
-            # Summary
-            scr.addstr(y, x, "📋 Summary:", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
-            y += 1
+            # Collect all content lines for scrolling in deep analysis
+            all_deep_lines = []
             
+            # Summary
             if deep_analysis.summary:
                 summary_lines = self._word_wrap(deep_analysis.summary, w - 2)
-                # Show summary lines with boundary checking
-                for line in summary_lines:
-                    if y >= start_y + h - 3:  # Leave space for other sections
-                        break
-                    try:
-                        scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["llm_summary"]))
-                        y += 1
-                    except:
-                        break
+                all_deep_lines.extend(summary_lines)
             else:
-                scr.addstr(y, x, "⚠️ No summary available", curses.color_pair(PALETTE["dim"]))
-                y += 1
-            y += 1
+                all_deep_lines.append("⚠️ No summary available")
             
-            # Detailed explanation - with boundary checking
-            if deep_analysis.details and y < start_y + h - 5:  # Extra conservative boundary
-                scr.addstr(y, x, "📝 Details:", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
-                y += 1
+            # Details
+            if deep_analysis.details:
+                all_deep_lines.append("")  # Empty line separator
+                all_deep_lines.append("Details:")
                 detail_lines = self._word_wrap(deep_analysis.details, w - 2)
-                # Show detail lines with boundary checking
-                for line in detail_lines:
-                    if y >= start_y + h - 3:  # Stop before border
-                        break
-                    try:
-                        scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["dim"]))
-                        y += 1
-                    except:
-                        break
-                y += 1
+                all_deep_lines.extend(detail_lines)
             
-            # Risks - with boundary checking
-            if deep_analysis.risks and y < start_y + h - 4:
-                scr.addstr(y, x, "⚠️  Risks:", curses.A_BOLD | curses.color_pair(PALETTE["removed"]))
-                y += 1
+            # Risks
+            if deep_analysis.risks:
+                all_deep_lines.append("")  # Empty line separator
+                all_deep_lines.append("Risks:")
                 for risk in deep_analysis.risks:
-                    if y >= start_y + h - 3:
-                        break
                     risk_lines = self._word_wrap(f"• {risk}", w - 2)
-                    for line in risk_lines:
-                        if y >= start_y + h - 3:
-                            break
-                        try:
-                            scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["removed"]))
-                            y += 1
-                        except:
-                            break
-                y += 1
+                    all_deep_lines.extend(risk_lines)
             
-            # Recommendations - with boundary checking
-            if deep_analysis.recommendations and y < start_y + h - 4:
-                scr.addstr(y, x, "💡 Recommendations:", curses.A_BOLD | curses.color_pair(PALETTE["added"]))
-                y += 1
+            # Recommendations
+            if hasattr(deep_analysis, 'recommendations') and deep_analysis.recommendations:
+                all_deep_lines.append("")  # Empty line separator
+                all_deep_lines.append("Recommendations:")
                 for rec in deep_analysis.recommendations:
-                    if y >= start_y + h - 3:
-                        break
                     rec_lines = self._word_wrap(f"• {rec}", w - 2)
-                    for line in rec_lines:
-                        if y >= start_y + h - 3:
-                            break
-                        try:
-                            scr.addnstr(y, x, line, w, curses.color_pair(PALETTE["added"]))
-                            y += 1
-                        except:
-                            break
+                    all_deep_lines.extend(rec_lines)
+            
+            # Apply scroll and display
+            scrolled_deep_lines = all_deep_lines[self.analysis_scroll:] if self.analysis_scroll < len(all_deep_lines) else []
+            
+            # Calculate line number width for deep analysis
+            total_deep_lines = len(all_deep_lines)
+            line_num_width = len(str(total_deep_lines)) + 1  # +1 for space
+            content_width = w - line_num_width - 1  # -1 for separator
+            
+            for i, line in enumerate(scrolled_deep_lines):
+                if y >= start_y + h - 2:  # Leave space only for border and scroll indicator at very bottom
+                    break
+                try:
+                    # Calculate actual line number (accounting for scroll)
+                    actual_line_num = self.analysis_scroll + i + 1
+                    line_num_str = f"{actual_line_num:>{line_num_width-1}} "
+                    
+                    # Draw line number
+                    scr.addstr(y, x, line_num_str, curses.color_pair(PALETTE["dim"]))
+                    
+                    # Draw separator
+                    scr.addstr(y, x + line_num_width, "│", curses.color_pair(PALETTE["border"]))
+                    
+                    # Skip empty lines for display but keep line numbers
+                    if line == "":
+                        y += 1
+                        continue
+                    
+                    # Draw content with adjusted position and width
+                    content_x = x + line_num_width + 1
+                    
+                    # Color based on content type
+                    if line.startswith("Details:"):
+                        scr.addnstr(y, content_x, line, content_width, curses.A_BOLD)
+                    elif line.startswith("Risks:"):
+                        scr.addnstr(y, content_x, line, content_width, curses.A_BOLD | curses.color_pair(PALETTE["removed"]))
+                    elif line.startswith("Recommendations:"):
+                        scr.addnstr(y, content_x, line, content_width, curses.A_BOLD | curses.color_pair(PALETTE["added"]))
+                    elif line.startswith("•") and "Recommendations:" in all_deep_lines[max(0, all_deep_lines.index(line)-5):all_deep_lines.index(line)]:
+                        scr.addnstr(y, content_x, line, content_width, curses.color_pair(PALETTE["added"]))
+                    elif line.startswith("•"):
+                        scr.addnstr(y, content_x, line, content_width, curses.color_pair(PALETTE["removed"]))
+                    elif line.startswith("⚠️"):
+                        scr.addnstr(y, content_x, line, content_width, curses.color_pair(PALETTE["dim"]))
+                    else:
+                        scr.addnstr(y, content_x, line, content_width, curses.color_pair(PALETTE["llm_summary"]))
+                    y += 1
+                except:
+                    break
+            
+            # Draw scroll indicator at very bottom for deep analysis
+            self._draw_analysis_scroll_indicator(scr, start_y + h - 1, x, w, all_deep_lines, deep_analysis)
         else:
             # No analysis available
             scr.addstr(y, x, "⏳ No analysis available yet", curses.color_pair(PALETTE["dim"]))
@@ -682,41 +775,36 @@ class DocTUIView:
                 scr.addstr(y, x, "Diff:", curses.A_BOLD)
                 y += 1
                 
-                # Show diff lines with proper color preservation
+                # Show diff lines with proper color preservation using unified function
+                wrapped_diff_lines = self._get_wrapped_diff_lines(diff.diff_text, w)
+                
+                # Apply vertical scrolling - calculate available space accurately
+                content_start_y = y
+                available_height = h - (y - 2) - 2  # Account for header and scroll indicator
+                diff_lines = wrapped_diff_lines[self.right_scroll:self.right_scroll + available_height]
+                
+                # Calculate line number width for diff lines (based on original lines, not wrapped)
                 raw_diff_lines = diff.diff_text.split('\n')
-                wrapped_diff_lines = []
-                for line in raw_diff_lines:
-                    # Get prefix for coloring
-                    prefix = line[0] if line and line[0] in '+-@' else ' '
-                    
-                    if len(line) <= w - 4:
-                        # Line fits, keep as is
-                        wrapped_diff_lines.append((line, prefix))
-                    else:
-                        # Need to wrap - break at word boundaries but preserve prefix
-                        if len(line) > 1:
-                            content = line[1:] if prefix in '+-@' else line
-                            # Break into chunks manually to preserve meaning
-                            chunk_size = w - 6  # Leave room for prefix and indicators
-                            for i in range(0, len(content), chunk_size):
-                                chunk = content[i:i + chunk_size]
-                                if i == 0:
-                                    # First chunk gets original prefix
-                                    display_line = (prefix + chunk) if prefix in '+-@' else chunk
-                                else:
-                                    # Continuation chunks get continuation indicator
-                                    display_line = '…' + chunk
-                                wrapped_diff_lines.append((display_line, prefix))
-                        else:
-                            wrapped_diff_lines.append((line, prefix))
+                total_original_lines = len(raw_diff_lines) 
+                line_num_width = len(str(total_original_lines)) + 1  # +1 for space
+                content_width = w - line_num_width - 1  # -1 for separator
                 
-                # Apply vertical scrolling
-                diff_lines = wrapped_diff_lines[self.right_scroll:self.right_scroll + h - y - 2]
-                
-                for i, (line_text, line_prefix) in enumerate(diff_lines):
-                    if y + i >= h - 2:
+                for i, (line_text, line_prefix, original_line_num) in enumerate(diff_lines):
+                    if y + i >= h - 1:  # Leave room only for scroll indicator
                         break
-                        
+                    
+                    # Use the original line number from the raw diff (not wrapped line index)
+                    line_num_str = f"{original_line_num:>{line_num_width-1}} "
+                    
+                    # Draw line number
+                    scr.addstr(y + i, x, line_num_str, curses.color_pair(PALETTE["dim"]))
+                    
+                    # Draw separator
+                    scr.addstr(y + i, x + line_num_width, "│", curses.color_pair(PALETTE["border"]))
+                    
+                    # Draw diff content with adjusted position and width
+                    content_x = x + line_num_width + 1
+                    
                     # Color diff lines based on preserved prefix
                     if line_prefix == '+':
                         attr = curses.color_pair(PALETTE["added"])
@@ -728,9 +816,12 @@ class DocTUIView:
                         attr = curses.color_pair(PALETTE["dim"])
                     
                     try:
-                        scr.addnstr(y + i, x, line_text[:w], w, attr)
+                        scr.addnstr(y + i, content_x, line_text, content_width, attr)
                     except:
                         pass
+                
+                # Draw scroll indicator at very bottom of diff panel
+                self._draw_diff_scroll_indicator(scr, y + len(diff_lines), x, w, len(wrapped_diff_lines))
             else:
                 scr.addstr(y, x, "No diff available", curses.color_pair(PALETTE["dim"]))
         else:
@@ -824,12 +915,11 @@ class DocTUIView:
             help_items = [
                 ("↑↓", "navigate"),
                 ("D", "analyze/toggle"),
-                ("Q", "queue/quit"),
-                ("R", "regions"),
+                ("Q", "quit"),
+                ("qe", "flip pages"),
+                ("rf", "scroll analysis"),
                 ("←→/hl", "scroll"),
-                ("i", "copy commits"),
-                ("o", "copy analysis"),
-                ("p", "copy diff")
+                ("iop", "copy")
             ]
         elif self.mode == "queue":
             help_items = [
@@ -838,8 +928,13 @@ class DocTUIView:
             ]
         elif self.mode == "llm_detail":
             help_items = [
-                ("D", "back to brief"),
-                ("any key", "back")
+                ("↑↓", "navigate"),
+                ("D", "analyze/toggle"),
+                ("Q", "quit"),
+                ("qe", "flip pages"),
+                ("rf", "scroll analysis"),
+                ("←→/hl", "scroll"),
+                ("iop", "copy")
             ]
         else:
             help_items = [("ESC", "back")]
@@ -867,56 +962,44 @@ class DocTUIView:
         
         if self.mode == "view":
             if ch in (curses.KEY_UP, ord('k')):
-                # Циклическая навигация вверх
-                page_size = 10  # Approximate page size
-                current_page_start = self.commit_page_offset
-                relative_pos = self.selected_commit_idx - current_page_start
-                
-                if relative_pos > 0:
-                    # Просто идем вверх внутри страницы
-                    self.selected_commit_idx -= 1
-                else:
-                    # Переходим на предыдущую страницу в конец
-                    if current_page_start > 0:
-                        self.commit_page_offset = max(0, current_page_start - page_size)
-                        new_page_end = min(self.commit_page_offset + page_size - 1, len(self.commits) - 1)
-                        self.selected_commit_idx = new_page_end
-                
+                self._navigate_up()
                 self.right_scroll = 0
+                self.analysis_scroll = 0  # Reset analysis scroll
                 self._load_cached_analyses()
                 
             elif ch in (curses.KEY_DOWN, ord('j')):
-                # Циклическая навигация вниз  
-                page_size = 10  # Approximate page size
-                current_page_start = self.commit_page_offset
-                current_page_end = min(current_page_start + page_size - 1, len(self.commits) - 1)
-                
-                if self.selected_commit_idx < current_page_end:
-                    # Просто идем вниз внутри страницы
-                    self.selected_commit_idx += 1
-                else:
-                    # Переходим на следующую страницу в начало
-                    if current_page_end < len(self.commits) - 1:
-                        self.commit_page_offset = min(current_page_start + page_size, len(self.commits) - 1)
-                        self.selected_commit_idx = self.commit_page_offset
-                
+                self._navigate_down()
                 self.right_scroll = 0
+                self.analysis_scroll = 0  # Reset analysis scroll
                 self._load_cached_analyses()
             elif ch in (ord('d'), ord('D')):
                 # Smart D button logic
                 self._handle_d_button()
-            elif ch in (ord('q'), ord('Q')):
-                # Show queue or quit
-                if self.mode == "queue":
-                    return False  # Quit
-                else:
-                    self.mode = "queue"  # Show queue
+            elif ch == ord('Q'):
+                return False  # Quit
             elif ch in (ord('r'), ord('R')):
                 # Toggle region detail mode
                 if self.selected_region:
                     self.mode = "region_detail"
             elif ch in (curses.KEY_RIGHT, ord('l')):
-                self.right_scroll += 10
+                # Scroll diff right with bounds checking
+                if self.commits and self.selected_commit_idx >= 0 and self.selected_commit_idx < len(self.commits) - 1:
+                    current_commit = self.commits[self.selected_commit_idx]
+                    prev_commit = self.commits[self.selected_commit_idx + 1]
+                    diff = self.git.get_commit_diff(prev_commit.hash, current_commit.hash)
+                    if diff and diff.diff_text:
+                        panel_width = 50  # Default estimate
+                        if hasattr(self, 'scr'):
+                            h, w = self.scr.getmaxyx()
+                            left_width = int(w * 0.382)
+                            panel_width = w - left_width - 3
+                        wrapped_diff_lines = self._get_wrapped_diff_lines(diff.diff_text, panel_width)
+                        max_scroll = self._get_max_scroll_for_diff(wrapped_diff_lines, self._get_diff_panel_height())
+                        self.right_scroll = min(max_scroll, self.right_scroll + 10)
+                    else:
+                        self.right_scroll += 10
+                else:
+                    self.right_scroll += 10
             elif ch in (curses.KEY_LEFT, ord('h')):
                 self.right_scroll = max(0, self.right_scroll - 10)
             elif ch == ord('L'):  # Shift+L - scroll commits right
@@ -929,29 +1012,67 @@ class DocTUIView:
                 self._copy_analysis()
             elif ch == ord('p'):  # Copy diff to clipboard
                 self._copy_diff()
+            elif ch == ord('q'):  # Quick page up
+                self._flip_page_up()
+            elif ch == ord('e'):  # Quick page down
+                self._flip_page_down()
+            elif ch == ord('r'):  # Scroll analysis up
+                self._scroll_analysis_up()
+            elif ch == ord('f'):  # Scroll analysis down
+                self._scroll_analysis_down()
         
         elif self.mode == "llm_detail":
-            # Allow navigation in deep mode
+            # Same navigation as view mode - just showing deep analysis
             if ch in (curses.KEY_UP, ord('k')):
-                self.selected_commit_idx = max(0, self.selected_commit_idx - 1)
+                self._navigate_up()
                 self.right_scroll = 0
+                self.analysis_scroll = 0  # Reset analysis scroll
                 self._load_cached_analyses()
             elif ch in (curses.KEY_DOWN, ord('j')):
-                self.selected_commit_idx = min(len(self.commits) - 1, self.selected_commit_idx + 1)
+                self._navigate_down()
                 self.right_scroll = 0
+                self.analysis_scroll = 0  # Reset analysis scroll
                 self._load_cached_analyses()
             elif ch in (ord('d'), ord('D')):
                 # Smart D button logic
                 self._handle_d_button()
-            elif ch in (ord('q'), ord('Q')):
-                # Show queue or quit
-                if self.mode == "queue":
-                    return False  # Quit
+            elif ch == ord('Q'):
+                return False  # Quit
+            elif ch == ord('q'):  # Quick page up
+                self._flip_page_up()
+            elif ch == ord('e'):  # Quick page down
+                self._flip_page_down()
+            elif ch == ord('r'):  # Scroll analysis up
+                self._scroll_analysis_up()
+            elif ch == ord('f'):  # Scroll analysis down
+                self._scroll_analysis_down()
+            elif ch in (curses.KEY_RIGHT, ord('l')):
+                # Scroll diff right with bounds checking
+                if self.commits and self.selected_commit_idx >= 0 and self.selected_commit_idx < len(self.commits) - 1:
+                    current_commit = self.commits[self.selected_commit_idx]
+                    prev_commit = self.commits[self.selected_commit_idx + 1]
+                    diff = self.git.get_commit_diff(prev_commit.hash, current_commit.hash)
+                    if diff and diff.diff_text:
+                        panel_width = 50  # Default estimate
+                        if hasattr(self, 'scr'):
+                            h, w = self.scr.getmaxyx()
+                            left_width = int(w * 0.382)
+                            panel_width = w - left_width - 3
+                        wrapped_diff_lines = self._get_wrapped_diff_lines(diff.diff_text, panel_width)
+                        max_scroll = self._get_max_scroll_for_diff(wrapped_diff_lines, self._get_diff_panel_height())
+                        self.right_scroll = min(max_scroll, self.right_scroll + 10)
+                    else:
+                        self.right_scroll += 10
                 else:
-                    self.mode = "queue"  # Show queue
-            else:
-                # Any other key returns to main view
-                self.mode = "view"
+                    self.right_scroll += 10
+            elif ch in (curses.KEY_LEFT, ord('h')):
+                self.right_scroll = max(0, self.right_scroll - 10)
+            elif ch == ord('i'):  # Copy commits to clipboard
+                self._copy_commits()
+            elif ch == ord('o'):  # Copy analysis to clipboard
+                self._copy_analysis()
+            elif ch == ord('p'):  # Copy diff to clipboard
+                self._copy_diff()
         elif self.mode == "region_detail":
             # Return to main view on any key
             self.mode = "view"
@@ -1230,6 +1351,8 @@ class DocTUIView:
         if self.selected_commit_idx < 0 or self.selected_commit_idx >= len(self.commits):
             return
         
+        # Allow switching even if analysis is running - just show what we have
+        
         current_commit = self.commits[self.selected_commit_idx]
         brief_analysis = self.current_analyses.get("brief")
         deep_analysis = self.current_analyses.get("deep")
@@ -1407,10 +1530,8 @@ class DocTUIView:
                             except Exception as e:
                                 # Remove corrupted cache entries
                                 del self.llm_cache[key]
-                print(f"📦 Loaded {len(self.llm_cache)} cached analyses")
             else:
                 self.llm_cache = {}
-                print("📦 No existing cache found, starting fresh")
         except Exception as e:
             print(f"❌ Error loading cache: {e}")
             self.llm_cache = {}
@@ -1438,6 +1559,501 @@ class DocTUIView:
             
             with open(self.cache_file, 'w', encoding='utf-8') as f:
                 json.dump(cache_data, f, indent=2, ensure_ascii=False)
-            print(f"💾 Saved {len(cache_data)} analyses to cache")
         except Exception as e:
             print(f"❌ Error saving cache: {e}")
+    
+    def _get_page_size(self):
+        """Calculate current page size based on panel dimensions"""
+        if hasattr(self, 'scr'):
+            h, w = self.scr.getmaxyx()
+            top_height = int(h * 0.45)
+            panel_height = top_height - 3
+            return panel_height - 4  # This matches available_lines = h - 4 from display
+        return 8  # Fallback
+    
+    def _navigate_up(self):
+        """Navigate up with page flipping"""
+        if self.selected_commit_idx <= 0:
+            return
+            
+        commits_per_page = self._get_page_size()
+        current_page_start = self.commit_page_offset
+        
+        # Check if we're at the first item of current page
+        if self.selected_commit_idx == current_page_start and current_page_start > 0:
+            # Flip to previous page, select last visible item of that page
+            self._start_page_flip_animation("up")
+            new_page_start = max(0, current_page_start - commits_per_page)
+            self.commit_page_offset = new_page_start
+            # Select last visible item of the new page
+            new_page_end = min(new_page_start + commits_per_page - 1, len(self.commits) - 1)
+            self.selected_commit_idx = new_page_end
+        else:
+            # Normal navigation within page
+            self.selected_commit_idx -= 1
+    
+    def _navigate_down(self):
+        """Navigate down with page flipping"""
+        if self.selected_commit_idx >= len(self.commits) - 1:
+            return
+            
+        commits_per_page = self._get_page_size()
+        current_page_start = self.commit_page_offset
+        current_page_end = min(current_page_start + commits_per_page - 1, len(self.commits) - 1)
+        
+        # Use the same calculation as display logic: available_lines = h - 4
+        if hasattr(self, 'scr'):
+            h, w = self.scr.getmaxyx()
+            top_height = int(h * 0.45)
+            panel_height = top_height - 3
+            actual_commits_per_page = panel_height - 4  # This matches available_lines = h - 4 from display
+        else:
+            actual_commits_per_page = commits_per_page
+            
+        # Calculate how many items are actually visible/displayable  
+        # Use the same logic as display: min(commits_per_page, available_lines, remaining_commits)
+        remaining_commits = len(self.commits) - current_page_start
+        visible_items_on_page = min(actual_commits_per_page, remaining_commits)
+        last_visible_idx = current_page_start + visible_items_on_page - 1
+        
+        if (self.selected_commit_idx >= last_visible_idx and 
+            last_visible_idx < len(self.commits) - 1):
+            # Flip to next page, select first item
+            self._start_page_flip_animation("down")
+            new_page_start = current_page_start + actual_commits_per_page
+            if new_page_start < len(self.commits):
+                self.commit_page_offset = new_page_start
+                self.selected_commit_idx = new_page_start
+        else:
+            # Normal navigation within page - but don't go past last item
+            if self.selected_commit_idx < len(self.commits) - 1:
+                next_idx = self.selected_commit_idx + 1
+                # Don't allow selecting beyond what's actually displayed
+                if next_idx <= last_visible_idx:
+                    self.selected_commit_idx = next_idx
+    
+    def _flip_page_up(self):
+        """Quick page flip up (q key)"""
+        if not self.commits:
+            return
+            
+        commits_per_page = self._get_page_size()
+        current_page_start = self.commit_page_offset
+        
+        if current_page_start > 0:
+            self._start_page_flip_animation("up")
+            new_page_start = max(0, current_page_start - commits_per_page)
+            self.commit_page_offset = new_page_start
+            # Select first item of the new page
+            self.selected_commit_idx = new_page_start
+            self._load_cached_analyses()
+    
+    def _flip_page_down(self):
+        """Quick page flip down (e key)"""
+        if not self.commits:
+            return
+            
+        commits_per_page = self._get_page_size()
+        current_page_start = self.commit_page_offset
+        current_page_end = min(current_page_start + commits_per_page - 1, len(self.commits) - 1)
+        
+        # Check if there's a next page
+        if current_page_end < len(self.commits) - 1:
+            self._start_page_flip_animation("down")
+            new_page_start = current_page_start + commits_per_page
+            if new_page_start < len(self.commits):
+                self.commit_page_offset = new_page_start
+                # Select first item of the new page
+                self.selected_commit_idx = new_page_start
+                self._load_cached_analyses()
+    
+    def _start_page_flip_animation(self, direction):
+        """Start page flip animation"""
+        import time
+        self.page_flip_animation = {
+            "active": True,
+            "start_time": time.time(),
+            "direction": direction
+        }
+    
+    def _is_analysis_running(self):
+        """Check if any analysis is currently running"""
+        if self.selected_commit_idx < 0 or self.selected_commit_idx >= len(self.commits):
+            return False
+            
+        current_commit = self.commits[self.selected_commit_idx]
+        
+        # Check if previous commit exists for diff
+        if self.selected_commit_idx >= len(self.commits) - 1:
+            return False
+            
+        prev_commit = self.commits[self.selected_commit_idx + 1]
+        
+        # Check analysis queue for running tasks
+        prev_short_hash = prev_commit.short_hash
+        analysis_status = self.analysis_queue.get_commit_analysis_status(
+            current_commit.hash, current_commit.short_hash, prev_short_hash)
+        
+        # Check if any analysis is running
+        return (analysis_status.get("brief") == "running" or 
+                analysis_status.get("deep") == "running")
+    
+    def _is_analysis_type_running(self, analysis_type):
+        """Check if specific analysis type is currently running"""
+        if self.selected_commit_idx < 0 or self.selected_commit_idx >= len(self.commits):
+            return False
+            
+        current_commit = self.commits[self.selected_commit_idx]
+        
+        # Check if previous commit exists for diff
+        if self.selected_commit_idx >= len(self.commits) - 1:
+            return False
+            
+        prev_commit = self.commits[self.selected_commit_idx + 1]
+        
+        # Check analysis queue for running tasks
+        prev_short_hash = prev_commit.short_hash
+        analysis_status = self.analysis_queue.get_commit_analysis_status(
+            current_commit.hash, current_commit.short_hash, prev_short_hash)
+        
+        # Check if specific analysis type is running
+        return analysis_status.get(analysis_type) == "running"
+    
+    def _get_analysis_panel_height(self):
+        """Get the height of analysis panel"""
+        if hasattr(self, 'scr'):
+            h, w = self.scr.getmaxyx()
+            top_height = int(h * 0.45)
+            return h - top_height - 4  # Bottom panel height minus borders
+        return 10  # Fallback
+    
+    def _scroll_analysis_up(self):
+        """Scroll analysis panel up by 40% of analysis panel height"""
+        panel_height = self._get_analysis_panel_height()
+        scroll_amount = max(1, int(panel_height * 0.4))
+        self.analysis_scroll = max(0, self.analysis_scroll - scroll_amount)
+    
+    def _scroll_analysis_down(self):
+        """Scroll analysis panel down by 40% of analysis panel height"""
+        panel_height = self._get_analysis_panel_height()
+        scroll_amount = max(1, int(panel_height * 0.4))
+        
+        # Get current analysis to check content length
+        current_analysis = None
+        analysis_type = "deep" if self.mode == "llm_detail" else "brief"
+        current_analysis = self.current_analyses.get(analysis_type)
+        
+        # Try to get ANY available analysis if preferred one is not available
+        if not current_analysis:
+            if analysis_type == "deep":
+                current_analysis = self.current_analyses.get("brief")
+            else:
+                current_analysis = self.current_analyses.get("deep")
+        
+        if current_analysis:
+            # Calculate total content lines to prevent over-scrolling
+            # Get panel width for proper word wrapping
+            if hasattr(self, 'scr'):
+                h, w = self.scr.getmaxyx()
+                left_width = int(w * 0.382)
+                panel_width = left_width - 3
+            else:
+                panel_width = 40
+            max_scroll = self._get_max_scroll_for_analysis(current_analysis, panel_height, panel_width)
+            self.analysis_scroll = min(max_scroll, self.analysis_scroll + scroll_amount)
+    
+    def _get_max_scroll_for_analysis(self, analysis, panel_height, panel_width=40):
+        """Calculate maximum scroll position to prevent scrolling past content"""
+        if not analysis:
+            return 0
+            
+        # Calculate total content lines (similar to display logic)
+        total_lines = 0
+        
+        # Summary
+        if analysis.summary:
+            summary_lines = self._word_wrap(analysis.summary, panel_width - 2)
+            total_lines += len(summary_lines)
+        else:
+            total_lines += 1  # "No summary available"
+        
+        # Details
+        if analysis.details:
+            total_lines += 2  # Empty line + "Details:" header
+            detail_lines = self._word_wrap(analysis.details, panel_width - 2)
+            total_lines += len(detail_lines)
+        
+        # Risks
+        if hasattr(analysis, 'risks') and analysis.risks:
+            total_lines += 2  # Empty line + "Risks:" header
+            for risk in analysis.risks:
+                risk_lines = self._word_wrap(f"• {risk}", panel_width - 2)
+                total_lines += len(risk_lines)
+        
+        # Recommendations (for deep analysis)
+        if hasattr(analysis, 'recommendations') and analysis.recommendations:
+            total_lines += 2  # Empty line + "Recommendations:" header
+            for rec in analysis.recommendations:
+                rec_lines = self._word_wrap(f"• {rec}", panel_width - 2)
+                total_lines += len(rec_lines)
+        
+        # Max scroll = total lines - visible lines, but at least 0
+        visible_lines = panel_height - 2  # Reserve lines for scroll indicator and border
+        return max(0, total_lines - visible_lines)
+    
+    def _draw_analysis_scroll_indicator(self, scr, y, x, w, content_lines, analysis):
+        """Draw horizontal scroll indicator at bottom of analysis panel"""
+        if not content_lines or not analysis:
+            return
+            
+        panel_height = self._get_analysis_panel_height()
+        visible_lines = panel_height - 1  # Reserve 1 line for scroll indicator
+        total_lines = len(content_lines)
+        
+        # Only show indicator if content is scrollable
+        if total_lines <= visible_lines:
+            return
+            
+        try:
+            # Calculate scroll position and thumb size based on content ratio
+            max_scroll = max(0, total_lines - visible_lines)
+            
+            # Create horizontal scroll bar (use available width - 4 for margins)
+            bar_width = w - 4
+            if bar_width < 3:
+                return
+            
+            # Calculate thumb size based on how much content is visible
+            content_ratio = min(1.0, visible_lines / total_lines)
+            thumb_size = max(1, int(bar_width * content_ratio))
+            
+            # Calculate thumb position based on scroll
+            if max_scroll > 0:
+                scroll_percentage = min(1.0, self.analysis_scroll / max_scroll)
+                # Adjust available space for thumb movement
+                available_space = bar_width - thumb_size
+                thumb_pos = int(scroll_percentage * available_space)
+            else:
+                thumb_pos = 0
+            
+            # Draw with border styling like git commits panel
+            # Left border
+            scr.addstr(y, x, "│", curses.color_pair(PALETTE["border"]))
+            
+            # Scroll bar background with proper spacing
+            bar_bg = "─" * bar_width
+            scr.addstr(y, x + 1, bar_bg, curses.color_pair(PALETTE["dim"]))
+            
+            # Draw scroll thumb (with proper size)
+            for i in range(thumb_size):
+                thumb_x = x + 1 + thumb_pos + i
+                if thumb_x < x + 1 + bar_width:
+                    scr.addstr(y, thumb_x, "█", curses.color_pair(PALETTE["modified"]))
+            
+            # Right border
+            scr.addstr(y, x + w - 1, "│", curses.color_pair(PALETTE["border"]))
+            
+            # Add content ratio indicator if there's space
+            if w > 25:
+                # Calculate what percentage of content is currently visible
+                visible_start_line = self.analysis_scroll
+                visible_end_line = min(total_lines, self.analysis_scroll + visible_lines)
+                
+                # Show content coverage as percentage
+                if total_lines > 0:
+                    coverage_start = int((visible_start_line / total_lines) * 100)
+                    coverage_end = int((visible_end_line / total_lines) * 100)
+                    
+                    if coverage_start == coverage_end:
+                        position_text = f"{coverage_end}%"
+                    else:
+                        position_text = f"{coverage_start}-{coverage_end}%"
+                else:
+                    position_text = "100%"
+                
+                # Place text after the scroll bar with proper spacing
+                text_x = x + 1 + bar_width + 1
+                if text_x + len(position_text) < x + w - 1:
+                    scr.addstr(y, text_x, position_text, curses.color_pair(PALETTE["dim"]))
+                    
+        except:
+            pass  # Ignore drawing errors
+    
+    def _get_diff_panel_height(self):
+        """Get the height of diff panel (right panel)"""
+        if hasattr(self, 'scr'):
+            h, w = self.scr.getmaxyx()
+            return h - 6  # Full height minus borders and header
+        return 20  # Fallback
+    
+    def _get_wrapped_diff_lines(self, diff_text, panel_width):
+        """Get wrapped diff lines using same logic as display - returns (line, prefix, line_num) tuples"""
+        raw_diff_lines = diff_text.split('\n')
+        wrapped_diff_lines = []
+        
+        # Track original line numbers for wrapped content
+        for original_line_num, line in enumerate(raw_diff_lines, 1):
+            # Get prefix for coloring
+            prefix = line[0] if line and line[0] in '+-@' else ' '
+            
+            # Calculate space needed for line numbers
+            line_num_space = len(str(len(raw_diff_lines))) + 2  # +2 for space and separator
+            available_content_width = panel_width - line_num_space - 4
+            
+            if len(line) <= available_content_width:
+                # Line fits, keep as is with original line number
+                wrapped_diff_lines.append((line, prefix, original_line_num))
+            else:
+                # Need to wrap - break at word boundaries but preserve prefix
+                if len(line) > 1:
+                    content = line[1:] if prefix in '+-@' else line
+                    # Break into chunks manually to preserve meaning
+                    chunk_size = panel_width - line_num_space - 6  # Leave room for line numbers, prefix and indicators
+                    if chunk_size > 0:
+                        for i in range(0, len(content), chunk_size):
+                            chunk = content[i:i + chunk_size]
+                            if i == 0:
+                                # First chunk gets original prefix and line number
+                                display_line = (prefix + chunk) if prefix in '+-@' else chunk
+                                wrapped_diff_lines.append((display_line, prefix, original_line_num))
+                            else:
+                                # Continuation chunks get continuation indicator but SAME line number and SAME color prefix
+                                display_line = '…' + chunk
+                                wrapped_diff_lines.append((display_line, prefix, original_line_num))
+                    else:
+                        # Chunk size too small, just add as is
+                        wrapped_diff_lines.append((line, prefix, original_line_num))
+                else:
+                    wrapped_diff_lines.append((line, prefix, original_line_num))
+        
+        return wrapped_diff_lines
+
+    def _get_max_scroll_for_diff(self, wrapped_diff_lines, panel_height):
+        """Calculate maximum scroll position to prevent scrolling past content"""
+        total_lines = len(wrapped_diff_lines)
+        
+        # Calculate visible lines based on actual diff display area
+        # Panel height minus header area (6 lines) minus scroll indicator (1 line)
+        visible_lines = panel_height - 7
+        
+        return max(0, total_lines - visible_lines)
+
+    def _scroll_diff_up(self):
+        """Scroll diff panel up by 40% of diff panel height"""
+        panel_height = self._get_diff_panel_height()
+        scroll_amount = max(1, int(panel_height * 0.4))
+        self.right_scroll = max(0, self.right_scroll - scroll_amount)
+    
+    def _scroll_diff_down(self):
+        """Scroll diff panel down by 40% of diff panel height"""
+        panel_height = self._get_diff_panel_height()
+        scroll_amount = max(1, int(panel_height * 0.4))
+        
+        # Get current diff to check content length
+        if not self.commits or self.selected_commit_idx < 0:
+            return
+            
+        # Calculate total diff lines using EXACT same logic as display
+        if self.selected_commit_idx < len(self.commits) - 1:
+            current_commit = self.commits[self.selected_commit_idx]
+            prev_commit = self.commits[self.selected_commit_idx + 1]
+            diff = self.git.get_commit_diff(prev_commit.hash, current_commit.hash)
+            
+            if diff and diff.diff_text:
+                # Get panel width for wrapping calculation
+                if hasattr(self, 'scr'):
+                    h, w = self.scr.getmaxyx()
+                    left_width = int(w * 0.382)  
+                    panel_width = w - left_width - 3  # Right panel width
+                else:
+                    panel_width = 50
+                
+                # Use the SAME function as display to get wrapped lines
+                wrapped_diff_lines = self._get_wrapped_diff_lines(diff.diff_text, panel_width)
+                total_wrapped_lines = len(wrapped_diff_lines)
+                
+                # Create a function like analysis does
+                max_scroll = self._get_max_scroll_for_diff(wrapped_diff_lines, panel_height)
+                
+                # Use EXACT same pattern as analysis
+                self.right_scroll = min(max_scroll, self.right_scroll + scroll_amount)
+    
+    def _draw_diff_scroll_indicator(self, scr, y, x, w, total_diff_lines):
+        """Draw horizontal scroll indicator at bottom of diff panel"""
+        if total_diff_lines <= 0:
+            return
+            
+        panel_height = self._get_diff_panel_height()
+        visible_lines = panel_height - 2  # Same as scrolling logic
+        
+        # Only show indicator if content is scrollable
+        if total_diff_lines <= visible_lines:
+            return
+            
+        try:
+            # Calculate scroll position and thumb size based on content ratio
+            max_scroll = max(0, total_diff_lines - visible_lines)
+            
+            # Create horizontal scroll bar (use available width - 4 for margins)
+            bar_width = w - 4
+            if bar_width < 3:
+                return
+            
+            # Calculate thumb position and size
+            if max_scroll > 0:
+                scroll_ratio = min(1.0, self.right_scroll / max_scroll)
+                thumb_pos = int(scroll_ratio * (bar_width - 3))
+                
+                # Thumb size represents visible content ratio
+                visible_ratio = min(1.0, visible_lines / total_diff_lines)
+                thumb_size = max(1, int(visible_ratio * bar_width * 0.3))
+            else:
+                thumb_pos = 0
+                thumb_size = bar_width
+            
+            # Ensure thumb doesn't go out of bounds
+            if thumb_pos + thumb_size > bar_width:
+                thumb_pos = max(0, bar_width - thumb_size)
+            
+            # Draw with border styling like git commits panel
+            # Left border
+            scr.addstr(y, x, "│", curses.color_pair(PALETTE["border"]))
+            
+            # Scroll bar background with proper spacing
+            bar_bg = "─" * bar_width
+            scr.addstr(y, x + 1, bar_bg, curses.color_pair(PALETTE["dim"]))
+            
+            # Draw scroll thumb (with proper size)
+            for i in range(thumb_size):
+                thumb_x = x + 1 + thumb_pos + i
+                if thumb_x < x + 1 + bar_width:
+                    scr.addstr(y, thumb_x, "█", curses.color_pair(PALETTE["modified"]))
+            
+            # Right border
+            scr.addstr(y, x + w - 1, "│", curses.color_pair(PALETTE["border"]))
+            
+            # Add content ratio indicator if there's space
+            if w > 25:
+                # Calculate what percentage of content is currently visible
+                visible_start_line = self.right_scroll
+                visible_end_line = min(total_diff_lines, self.right_scroll + visible_lines)
+                
+                # Show content coverage as percentage
+                if total_diff_lines > 0:
+                    coverage_start = int((visible_start_line / total_diff_lines) * 100)
+                    coverage_end = int((visible_end_line / total_diff_lines) * 100)
+                    
+                    if coverage_start == coverage_end:
+                        position_text = f"{coverage_end}%"
+                    else:
+                        position_text = f"{coverage_start}-{coverage_end}%"
+                else:
+                    position_text = "100%"
+                
+                # Place text after the scroll bar with proper spacing
+                text_x = x + 1 + bar_width + 1
+                if text_x + len(position_text) < x + w - 1:
+                    scr.addstr(y, text_x, position_text, curses.color_pair(PALETTE["dim"]))
+                    
+        except:
+            pass  # Ignore drawing errors
