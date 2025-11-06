@@ -136,7 +136,7 @@ class DocTUIView:
         # Try to load cached analyses for the current version
         self._load_cached_analyses()
         if not any(self.current_analyses.values()):
-            self.status = "Press D to analyze commit"
+            self.status = ""
         else:
             # Clear any existing status if we have analyses
             self.status = ""
@@ -178,9 +178,19 @@ class DocTUIView:
                     self._draw_history_panel(scr, 2, 2, left_width - 3, top_height - 3)
                     self._draw_llm_deep_analysis(scr, top_height + 1, 2, left_width - 3, bottom_height - 2)
                     self._draw_document_panel(scr, 2, left_width + 2, right_width - 3, h - 4)
+                elif self.mode == "help":
+                    # Clear entire screen for clean help display
+                    scr.clear()
+                    # Draw frame for help mode
+                    self._draw_help_frame(scr, h, w)
+                    # Split into two panels like main interface
+                    help_left_width = int(w * 0.5)
+                    self._draw_help_left_panel(scr, 2, 2, help_left_width - 3, h - 4)
+                    self._draw_help_right_panel(scr, 2, help_left_width + 2, w - help_left_width - 3, h - 4)
                 
-                # Status bar with gradient
-                self._draw_status_bar(scr, h - 1, w)
+                # Status bar with gradient (skip in help mode)
+                if self.mode != "help":
+                    self._draw_status_bar(scr, h - 1, w)
                 
                 scr.refresh()
                 
@@ -870,6 +880,417 @@ class DocTUIView:
                 pass
             y += 1
     
+    def _draw_simple_help(self, scr, h, w):
+        """Draw simple, readable help screen"""
+        try:
+            y = 1
+            x = 2
+            
+            # Title
+            title = "DRommage v8 - Help"
+            scr.addstr(y, max(0, (w - len(title)) // 2), title, curses.A_BOLD | curses.color_pair(PALETTE["title"]))
+            y += 3
+            
+            help_content = [
+                ("OVERVIEW:", ""),
+                ("", "Git-powered documentation analysis with AI insights"),
+                ("", ""),
+                ("NAVIGATION:", ""),
+                ("↑/↓", "Navigate commits"),
+                ("←/→", "Scroll diff horizontally"),
+                ("q/e", "Page up/down quickly"),
+                ("", ""),
+                ("AI ANALYSIS:", ""),
+                ("D", "Toggle brief/deep analysis"),
+                ("r/f", "Scroll analysis text"),
+                ("", ""),
+                ("CLIPBOARD:", ""),
+                ("i", "Copy commit info"),
+                ("o", "Copy analysis text"),
+                ("p", "Copy diff content"),
+                ("", ""),
+                ("OTHER:", ""),
+                ("h", "Toggle this help"),
+                ("Q", "Quit application"),
+                ("", ""),
+                ("", "Press h to return to main interface")
+            ]
+            
+            for key, desc in help_content:
+                if y >= h - 2:
+                    break
+                    
+                if key == "":
+                    # Empty line or description only
+                    if desc:
+                        if desc.endswith("interface"):
+                            # Footer
+                            scr.addstr(y, max(0, (w - len(desc)) // 2), desc, curses.color_pair(PALETTE["dim"]) | curses.A_ITALIC)
+                        elif desc.endswith(":"):
+                            # Section header
+                            scr.addstr(y, x, desc, curses.A_BOLD | curses.color_pair(PALETTE["title"]))
+                        else:
+                            # Regular description
+                            scr.addstr(y, x + 2, desc, curses.color_pair(PALETTE["llm_summary"]))
+                else:
+                    # Key + description
+                    scr.addstr(y, x + 2, f"{key:<4} - {desc}", curses.color_pair(PALETTE["llm_summary"]))
+                
+                y += 1
+                
+        except Exception as e:
+            scr.addstr(1, 2, f"Help error: {str(e)[:50]}", curses.color_pair(PALETTE["dim"]))
+
+    def _draw_help_frame(self, scr, h, w):
+        """Draw frame for help mode similar to main interface"""
+        # Title
+        title = "DRommage v8 - Help Documentation"
+        title_x = max(0, (w - len(title)) // 2)
+        try:
+            scr.addstr(0, title_x, title, curses.color_pair(PALETTE["title"]) | curses.A_BOLD)
+        except:
+            scr.addstr(0, title_x, title, curses.A_BOLD)
+        
+        # Help left width (50%)
+        help_left_width = int(w * 0.5)
+        
+        # Simple ASCII borders
+        try:
+            # Top border
+            scr.addstr(1, 0, "+", curses.color_pair(PALETTE["border"]))
+            for x in range(1, help_left_width):
+                scr.addstr(1, x, "-", curses.color_pair(PALETTE["border"]))
+            scr.addstr(1, help_left_width, "+", curses.color_pair(PALETTE["border"]))
+            for x in range(help_left_width + 1, w - 1):
+                scr.addstr(1, x, "-", curses.color_pair(PALETTE["border"]))
+            scr.addstr(1, w - 1, "+", curses.color_pair(PALETTE["border"]))
+            
+            # Vertical separators
+            for y in range(2, h - 1):
+                scr.addstr(y, 0, "|", curses.color_pair(PALETTE["border"]))
+                scr.addstr(y, help_left_width, "|", curses.color_pair(PALETTE["border"]))
+                scr.addstr(y, w - 1, "|", curses.color_pair(PALETTE["border"]))
+            
+            # Bottom border
+            scr.addstr(h - 1, 0, "+", curses.color_pair(PALETTE["border"]))
+            for x in range(1, help_left_width):
+                scr.addstr(h - 1, x, "-", curses.color_pair(PALETTE["border"]))
+            scr.addstr(h - 1, help_left_width, "+", curses.color_pair(PALETTE["border"]))
+            for x in range(help_left_width + 1, w - 1):
+                scr.addstr(h - 1, x, "-", curses.color_pair(PALETTE["border"]))
+            scr.addstr(h - 1, w - 1, "+", curses.color_pair(PALETTE["border"]))
+        except:
+            pass  # If border drawing fails, continue without borders
+        
+        # Help bar at bottom
+        help_text = "[h] back to main"
+        help_x = max(1, (w - len(help_text)) // 2)
+        try:
+            scr.addnstr(h - 1, help_x, help_text, w - 2, curses.color_pair(PALETTE["dim"]))
+        except:
+            pass
+
+    def _draw_help_left_panel(self, scr, y, x, w, h):
+        """Draw left help panel - overview and interface"""
+        try:
+            # Overview section
+            try:
+                scr.addstr(y, x, "OVERVIEW", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
+            except:
+                scr.addstr(y, x, "OVERVIEW", curses.A_BOLD)
+            y += 2
+            
+            overview_text = [
+                "DRommage is a git-powered documentation analysis tool that uses AI to",
+                "understand code changes and provide intelligent insights about your",
+                "repository evolution."
+            ]
+            
+            for line in overview_text:
+                if y >= h - 2:
+                    break
+                try:
+                    scr.addstr(y, x, line[:w-2], curses.color_pair(PALETTE["llm_summary"]))
+                except:
+                    scr.addstr(y, x, line[:w-2])
+                y += 1
+            y += 1
+            
+            # Interface layout
+            try:
+                scr.addstr(y, x, "INTERFACE LAYOUT", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
+            except:
+                scr.addstr(y, x, "INTERFACE LAYOUT", curses.A_BOLD)
+            y += 2
+            
+            layout_lines = [
+                "+-------------+-------------+",
+                "| Commit List |             |",
+                "|   (Left)    | Diff Panel  |",
+                "+-------------+  (Right)    |",
+                "| Analysis    |             |",
+                "| (Bot. Left) |             |",
+                "+-------------+-------------+"
+            ]
+            
+            for line in layout_lines:
+                if y >= h - 2:
+                    break
+                # Center the layout diagram
+                line_x = x + max(0, (w - len(line)) // 2)
+                try:
+                    scr.addstr(y, line_x, line[:w-2], curses.color_pair(PALETTE["border"]))
+                except:
+                    scr.addstr(y, line_x, line[:w-2])
+                y += 1
+            y += 1
+            
+            # Navigation
+            if y < h - 10:
+                try:
+                    scr.addstr(y, x, "NAVIGATION", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
+                except:
+                    scr.addstr(y, x, "NAVIGATION", curses.A_BOLD)
+                y += 2
+                
+                nav_items = [
+                    "Up/Down  - Navigate through commit list",
+                    "Left/Right  - Scroll diff panel horizontally", 
+                    "q/e  - Page up/down through commits quickly",
+                    "h    - Toggle this help screen"
+                ]
+                
+                for item in nav_items:
+                    if y >= h - 2:
+                        break
+                    try:
+                        scr.addstr(y, x, item[:w-2], curses.color_pair(PALETTE["llm_summary"]))
+                    except:
+                        scr.addstr(y, x, item[:w-2])
+                    y += 1
+                    
+        except Exception as e:
+            scr.addstr(y, x, "Help panel error", curses.color_pair(PALETTE["dim"]))
+
+    def _draw_help_right_panel(self, scr, y, x, w, h):
+        """Draw right help panel - features and operations"""
+        try:
+            # AI Analysis
+            try:
+                scr.addstr(y, x, "AI ANALYSIS", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
+            except:
+                scr.addstr(y, x, "AI ANALYSIS", curses.A_BOLD)
+            y += 2
+            
+            ai_items = [
+                "D    - Toggle between brief and deep AI analysis of selected commit",
+                "       Brief: Quick summary of changes",
+                "       Deep: Detailed analysis with risks and recommendations",
+                "r/f  - Scroll analysis text up/down",
+                "       Shows AI-generated summaries",
+                "       Includes change types and impact levels"
+            ]
+            
+            for item in ai_items:
+                if y >= h - 2:
+                    break
+                try:
+                    scr.addstr(y, x, item[:w-2], curses.color_pair(PALETTE["llm_summary"]))
+                except:
+                    scr.addstr(y, x, item[:w-2])
+                y += 1
+            y += 1
+            
+            # Clipboard operations
+            try:
+                scr.addstr(y, x, "CLIPBOARD OPERATIONS", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
+            except:
+                scr.addstr(y, x, "CLIPBOARD OPERATIONS", curses.A_BOLD)
+            y += 2
+            
+            clipboard_items = [
+                "i    - Copy commit info (hash, message, author) to clipboard",
+                "o    - Copy AI analysis text to clipboard",
+                "p    - Copy diff content to clipboard"
+            ]
+            
+            for item in clipboard_items:
+                if y >= h - 2:
+                    break
+                try:
+                    scr.addstr(y, x, item[:w-2], curses.color_pair(PALETTE["llm_summary"]))
+                except:
+                    scr.addstr(y, x, item[:w-2])
+                y += 1
+            y += 1
+            
+            # Features
+            try:
+                scr.addstr(y, x, "FEATURES", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
+            except:
+                scr.addstr(y, x, "FEATURES", curses.A_BOLD)
+            y += 2
+            
+            features = [
+                "- Async AI analysis - doesn't block interface",
+                "- Smart caching - analysis results saved locally", 
+                "- Unicode interface - beautiful box drawing characters",
+                "- Cross-platform clipboard support",
+                "- Real-time scroll position indicators"
+            ]
+            
+            for feature in features:
+                if y >= h - 2:
+                    break
+                try:
+                    scr.addstr(y, x, feature[:w-2], curses.color_pair(PALETTE["llm_summary"]))
+                except:
+                    scr.addstr(y, x, feature[:w-2])
+                y += 1
+            y += 1
+            
+            # Tips
+            if y < h - 6:
+                try:
+                    scr.addstr(y, x, "USAGE TIPS", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
+                except:
+                    scr.addstr(y, x, "USAGE TIPS", curses.A_BOLD)
+                y += 2
+                
+                tips = [
+                    "- Press D on any commit to start AI analysis",
+                    "- Analysis runs in background, indicated by animations",
+                    "- Use copy functions (i/o/p) to share insights with team",
+                    "- Navigate quickly with q/e for large repositories",
+                    "- Help analysis improve by reviewing AI recommendations"
+                ]
+                
+                for tip in tips:
+                    if y >= h - 2:
+                        break
+                    try:
+                        scr.addstr(y, x, tip[:w-2], curses.color_pair(PALETTE["llm_summary"]))
+                    except:
+                        scr.addstr(y, x, tip[:w-2])
+                    y += 1
+            
+            # Footer
+            if y < h - 3:
+                y += 1
+                footer = "Press h to return to main interface"
+                scr.addstr(y, x + max(0, (w - len(footer)) // 2), footer, curses.color_pair(PALETTE["dim"]) | curses.A_ITALIC)
+                    
+        except Exception as e:
+            scr.addstr(y, x, "Help panel error", curses.color_pair(PALETTE["dim"]))
+
+    def _draw_help_screen(self, scr, y, x, w, h):
+        """Draw comprehensive help screen"""
+        try:
+            help_text = [
+                "╔═══ DRommage v8 - Help ═══╗",
+                "",
+                "📖 OVERVIEW",
+                "DRommage is a git-powered documentation analysis tool that uses AI to understand",
+                "code changes and provide intelligent insights about your repository evolution.",
+                "",
+                "🖥️  INTERFACE LAYOUT",
+                "┌─────────────────┬─────────────────┐",
+                "│   Commit List   │                 │",
+                "│   (Left)        │   Diff Panel    │",
+                "├─────────────────┤   (Right)       │",
+                "│ Analysis Panel  │                 │",
+                "│ (Bottom Left)   │                 │",
+                "└─────────────────┴─────────────────┘",
+                "",
+                "🚀 NAVIGATION",
+                "↑/↓  - Navigate through commit list",
+                "←/→  - Scroll diff panel horizontally",
+                "q/e  - Page up/down through commits quickly",
+                "",
+                "🤖 AI ANALYSIS",
+                "D    - Toggle between brief and deep AI analysis of selected commit",
+                "     • Brief: Quick summary of changes",
+                "     • Deep: Detailed analysis with risks and recommendations",
+                "",
+                "📋 CLIPBOARD OPERATIONS",
+                "i    - Copy commit info (hash, message, author) to clipboard",
+                "o    - Copy AI analysis text to clipboard",
+                "p    - Copy diff content to clipboard",
+                "",
+                "🔍 ANALYSIS PANEL (Bottom Left)",
+                "r/f  - Scroll analysis text up/down",
+                "     • Shows AI-generated summaries",
+                "     • Includes change types and impact levels",
+                "     • Provides recommendations for improvements",
+                "",
+                "📄 DIFF PANEL (Right Side)",
+                "     • Shows git diff for selected commit vs previous",
+                "     • Color-coded: green (+) additions, red (-) deletions",
+                "     • Line numbers preserved for long lines",
+                "     • Scroll indicators show position in large diffs",
+                "",
+                "⚡ FEATURES",
+                "• Async AI analysis - doesn't block interface",
+                "• Smart caching - analysis results saved locally",
+                "• Unicode interface - beautiful box drawing characters",
+                "• Cross-platform clipboard support",
+                "• Real-time scroll position indicators",
+                "",
+                "🎯 USAGE TIPS",
+                "• Press D on any commit to start AI analysis",
+                "• Analysis runs in background, indicated by animations",
+                "• Use copy functions (i/o/p) to share insights with team",
+                "• Navigate quickly with q/e for large repositories",
+                "• Help analysis improve by reviewing AI recommendations",
+                "",
+                "⌨️  QUICK REFERENCE",
+                "h    - Toggle this help screen",
+                "Q    - Quit application",
+                "",
+                "Press h to return to main interface"
+            ]
+            
+            # Display help text with scrolling if needed
+            start_line = 0
+            visible_lines = h - 2
+            
+            for i, line in enumerate(help_text[start_line:start_line + visible_lines]):
+                if y + i >= h:
+                    break
+                try:
+                    # Center the text or left-align based on content
+                    if line.startswith("╔"):
+                        # Center header
+                        text_x = max(0, (w - len(line)) // 2)
+                    elif line.startswith("┌") or line.startswith("│") or line.startswith("├") or line.startswith("└"):
+                        # Center box drawing
+                        text_x = max(0, (w - len(line)) // 2)
+                    elif line.startswith("🖥️") or line.startswith("📖") or line.startswith("🚀"):
+                        # Section headers
+                        text_x = x + 2
+                        scr.addnstr(y + i, text_x, line, w - 4, curses.color_pair(PALETTE["title"]) | curses.A_BOLD)
+                        continue
+                    elif line.startswith("    "):
+                        # Indent action items (4 spaces)
+                        text_x = x + 4
+                    else:
+                        # Regular text
+                        text_x = x + 2
+                    
+                    # Determine color
+                    if "Press h to return" in line:
+                        attr = curses.color_pair(PALETTE["dim"]) | curses.A_ITALIC
+                    else:
+                        attr = curses.color_pair(PALETTE["llm_summary"])
+                    
+                    scr.addnstr(y + i, text_x, line, w - 4, attr)
+                except:
+                    pass
+                    
+        except Exception as e:
+            # Fallback simple help
+            scr.addstr(y, x, "Help screen error - press ESC to return", curses.color_pair(PALETTE["dim"]))
+
     def _draw_region_history(self, scr, y, x, w, h):
         """Show history of selected region with LLM descriptions"""
         if not self.selected_region:
@@ -918,8 +1339,9 @@ class DocTUIView:
                 ("Q", "quit"),
                 ("qe", "flip pages"),
                 ("rf", "scroll analysis"),
-                ("←→/hl", "scroll"),
-                ("iop", "copy")
+                ("←→", "scroll"),
+                ("iop", "copy"),
+                ("h", "help")
             ]
         elif self.mode == "queue":
             help_items = [
@@ -933,9 +1355,12 @@ class DocTUIView:
                 ("Q", "quit"),
                 ("qe", "flip pages"),
                 ("rf", "scroll analysis"),
-                ("←→/hl", "scroll"),
-                ("iop", "copy")
+                ("←→", "scroll"),
+                ("iop", "copy"),
+                ("h", "help")
             ]
+        elif self.mode == "help":
+            help_items = [("ESC", "back")]
         else:
             help_items = [("ESC", "back")]
         
@@ -946,9 +1371,7 @@ class DocTUIView:
             help_parts.append(f"[{key}] {desc}")
         help_text = " │ ".join(help_parts)
         
-        # Add status if present (only basic status, no analysis messages)
-        if self.status and not any(indicator in self.status for indicator in ["🔄", "⏳", "🤖", "❌", "✅"]):
-            help_text = f"{self.status} │ {help_text}"
+        # Don't add status to help bar - help items are sufficient
         
         # Center and display
         x = max(1, (w - len(help_text)) // 2)
@@ -981,7 +1404,7 @@ class DocTUIView:
                 # Toggle region detail mode
                 if self.selected_region:
                     self.mode = "region_detail"
-            elif ch in (curses.KEY_RIGHT, ord('l')):
+            elif ch == curses.KEY_RIGHT:
                 # Scroll diff right with bounds checking
                 if self.commits and self.selected_commit_idx >= 0 and self.selected_commit_idx < len(self.commits) - 1:
                     current_commit = self.commits[self.selected_commit_idx]
@@ -1000,12 +1423,10 @@ class DocTUIView:
                         self.right_scroll += 10
                 else:
                     self.right_scroll += 10
-            elif ch in (curses.KEY_LEFT, ord('h')):
+            elif ch == curses.KEY_LEFT:
                 self.right_scroll = max(0, self.right_scroll - 10)
-            elif ch == ord('L'):  # Shift+L - scroll commits right
-                self.commit_scroll += 5
-            elif ch == ord('H'):  # Shift+H - scroll commits left  
-                self.commit_scroll = max(0, self.commit_scroll - 5)
+            elif ch == ord('h'):
+                self.mode = "help"
             elif ch == ord('i'):  # Copy commits to clipboard
                 self._copy_commits()
             elif ch == ord('o'):  # Copy analysis to clipboard
@@ -1046,7 +1467,7 @@ class DocTUIView:
                 self._scroll_analysis_up()
             elif ch == ord('f'):  # Scroll analysis down
                 self._scroll_analysis_down()
-            elif ch in (curses.KEY_RIGHT, ord('l')):
+            elif ch == curses.KEY_RIGHT:
                 # Scroll diff right with bounds checking
                 if self.commits and self.selected_commit_idx >= 0 and self.selected_commit_idx < len(self.commits) - 1:
                     current_commit = self.commits[self.selected_commit_idx]
@@ -1065,8 +1486,10 @@ class DocTUIView:
                         self.right_scroll += 10
                 else:
                     self.right_scroll += 10
-            elif ch in (curses.KEY_LEFT, ord('h')):
+            elif ch == curses.KEY_LEFT:
                 self.right_scroll = max(0, self.right_scroll - 10)
+            elif ch == ord('h'):
+                self.mode = "help"
             elif ch == ord('i'):  # Copy commits to clipboard
                 self._copy_commits()
             elif ch == ord('o'):  # Copy analysis to clipboard
@@ -1076,7 +1499,12 @@ class DocTUIView:
         elif self.mode == "region_detail":
             # Return to main view on any key
             self.mode = "view"
-        
+            
+        elif self.mode == "help":
+            if ch == ord('h'):  # h key to toggle back
+                self.mode = "view"  # Go back to main view
+            else:
+                pass  # Ignore other keys in help mode
         
         return True
     
@@ -1197,7 +1625,7 @@ class DocTUIView:
         if self.current_analyses["brief"] or self.current_analyses["deep"]:
             self.status = ""  # Clear status when we have analyses - they show in panel
         else:
-            self.status = "Press D to analyze commit"
+            self.status = ""
     
     def _word_wrap(self, text: str, width: int) -> List[str]:
         """Simple word wrapping"""
