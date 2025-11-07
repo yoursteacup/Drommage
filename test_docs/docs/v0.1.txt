@@ -1,4 +1,0 @@
-# API Documentation
-
-This is the first draft of our API documentation.
-Includes overview and authentication details.

@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "drommage"
+version = "1.0.0"
+description = "Intelligent Documentation Version Control with LLM-powered semantic analysis"
+authors = [{name = "DRommage Contributors"}]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9", 
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Documentation",
+    "Topic :: Software Development :: Documentation",
+    "Topic :: Software Development :: Version Control :: Git",
+    "Environment :: Console :: Curses",
+]
+keywords = ["documentation", "git", "llm", "semantic-analysis", "version-control", "diff"]
+
+[project.optional-dependencies]
+dev = ["pytest", "flake8", "mypy"]
+
+[project.scripts]
+drommage = "drommage.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/yoursteacup/drommage"
+Repository = "https://github.com/yoursteacup/drommage"
+Documentation = "https://github.com/yoursteacup/drommage#readme"
+Issues = "https://github.com/yoursteacup/drommage/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["drommage*"]
