@@ -1,0 +1,31 @@
+# Include user documentation only
+include README.md
+include LICENSE
+include GETTING_STARTED.md
+include USER_GUIDE.md
+include CUSTOM_PROMPTS.md
+include UNIVERSAL_PROVIDERS.md
+
+# Include example files
+include example_*.json
+
+# Include requirements
+include requirements.txt
+
+# Include package data
+recursive-include drommage *.py
+recursive-include drommage/core *.py
+
+# Exclude development files, internal docs, and cache
+exclude .gitignore
+exclude *.pyc
+exclude __pycache__
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]
+recursive-exclude * .DS_Store
+exclude .drommage/
+exclude tests/
+exclude docs/
+exclude build/
+exclude dist/
+exclude *.egg-info/

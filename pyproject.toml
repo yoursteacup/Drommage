@@ -5,13 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "drommage"
 version = "1.0.0"
-description = "Intelligent Documentation Version Control with LLM-powered semantic analysis"
-authors = [{name = "DRommage Contributors"}]
+description = "AI-powered git commit analysis tool for developers and teams"
+authors = [{name = "DRommage Contributors", email = "drommage@example.com"}]
 license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.8"
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
@@ -20,12 +20,12 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "Topic :: Documentation",
-    "Topic :: Software Development :: Documentation",
     "Topic :: Software Development :: Version Control :: Git",
+    "Topic :: Software Development :: Quality Assurance",
     "Environment :: Console :: Curses",
+    "Environment :: Console",
 ]
-keywords = ["documentation", "git", "llm", "semantic-analysis", "version-control", "diff"]
+keywords = ["git", "llm", "ai", "analysis", "commit", "retrospection", "code-review", "cli", "tui"]
 
 [project.optional-dependencies]
 dev = ["pytest", "flake8", "mypy"]

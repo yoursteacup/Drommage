@@ -1,7 +1,17 @@
-# No external dependencies required!
-# DRommage uses only Python standard library
+# DRommage has ZERO external dependencies!
+# Uses only Python standard library for maximum compatibility
 
-# Optional: For LLM support, install Ollama separately:
-# macOS: brew install ollama
-# Linux: curl -fsSL https://ollama.ai/install.sh | sh
-# Then: ollama pull mistral
+# Optional LLM providers (install separately):
+#
+# 1. Ollama (local, free):
+#    macOS: brew install ollama
+#    Linux: curl -fsSL https://ollama.ai/install.sh | sh
+#    Then: ollama pull mistral
+#
+# 2. OpenAI API:
+#    Set environment variable: OPENAI_API_KEY=sk-...
+#
+# 3. Anthropic Claude API:
+#    Set environment variable: ANTHROPIC_API_KEY=sk-ant-...
+#
+# All providers configured through: drommage config

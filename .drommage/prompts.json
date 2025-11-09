@@ -1,0 +1,116 @@
+{
+  "prompts": [
+    {
+      "name": "brief_default",
+      "description": "Standard brief analysis",
+      "category": "general",
+      "variables": [
+        "commit_hash",
+        "message",
+        "files_changed",
+        "insertions",
+        "deletions"
+      ],
+      "template": "Analyze this git commit briefly in one sentence.\n\nCommit: {commit_hash}\nMessage: {message}\nFiles changed: {files_changed}\nLines: +{insertions}, -{deletions}\n\nProvide a concise one-line summary of what this commit does and its significance."
+    },
+    {
+      "name": "brief_security",
+      "description": "Security-focused brief analysis",
+      "category": "security",
+      "variables": [
+        "commit_hash",
+        "message",
+        "files_changed",
+        "insertions",
+        "deletions"
+      ],
+      "template": "Analyze this git commit for security implications in one sentence.\n\nCommit: {commit_hash}\nMessage: {message}\nFiles changed: {files_changed}\nLines: +{insertions}, -{deletions}\n\nFocus on: authentication, authorization, input validation, data exposure, cryptography, and other security concerns. Provide a brief security assessment."
+    },
+    {
+      "name": "brief_performance",
+      "description": "Performance-focused brief analysis",
+      "category": "performance",
+      "variables": [
+        "commit_hash",
+        "message",
+        "files_changed",
+        "insertions",
+        "deletions"
+      ],
+      "template": "Analyze this git commit for performance implications in one sentence.\n\nCommit: {commit_hash}\nMessage: {message}\nFiles changed: {files_changed}\nLines: +{insertions}, -{deletions}\n\nFocus on: algorithm complexity, database queries, caching, memory usage, network calls, and other performance factors. Provide a brief performance assessment."
+    },
+    {
+      "name": "brief_architecture",
+      "description": "Architecture-focused brief analysis",
+      "category": "architecture",
+      "variables": [
+        "commit_hash",
+        "message",
+        "files_changed",
+        "insertions",
+        "deletions"
+      ],
+      "template": "Analyze this git commit for architectural implications in one sentence.\n\nCommit: {commit_hash}\nMessage: {message}\nFiles changed: {files_changed}\nLines: +{insertions}, -{deletions}\n\nFocus on: design patterns, separation of concerns, modularity, dependencies, coupling, and architectural decisions. Provide a brief architectural assessment."
+    },
+    {
+      "name": "deep_default",
+      "description": "Standard deep analysis",
+      "category": "general",
+      "variables": [
+        "commit_hash",
+        "message",
+        "author",
+        "date",
+        "files_changed",
+        "insertions",
+        "deletions"
+      ],
+      "template": "Analyze this git commit in detail. Return JSON with keys: summary, details, risks, recommendations.\n\nCommit: {commit_hash}\nMessage: {message}\nAuthor: {author}\nDate: {date}\nFiles changed: {files_changed}\nLines: +{insertions}, -{deletions}\n\nAnalyze:\n1. What type of change this is (feature, bugfix, refactor, etc.)\n2. Potential impact and risks\n3. Code quality implications\n4. Recommendations for improvement\n\nReturn valid JSON format:\n{{\n  \"summary\": \"Brief one-line summary\",\n  \"details\": \"Detailed explanation of the changes\",\n  \"risks\": [\"risk1\", \"risk2\"],\n  \"recommendations\": [\"rec1\", \"rec2\"]\n}}"
+    },
+    {
+      "name": "deep_security_audit",
+      "description": "Comprehensive security audit",
+      "category": "security",
+      "variables": [
+        "commit_hash",
+        "message",
+        "author",
+        "date",
+        "files_changed",
+        "insertions",
+        "deletions"
+      ],
+      "template": "Perform a comprehensive security audit of this git commit. Return JSON with security-focused analysis.\n\nCommit: {commit_hash}\nMessage: {message}\nAuthor: {author}\nDate: {date}\nFiles changed: {files_changed}\nLines: +{insertions}, -{deletions}\n\nSecurity Analysis Framework:\n1. Authentication & Authorization changes\n2. Input validation and sanitization\n3. Data exposure and privacy concerns\n4. Cryptographic implementations\n5. Dependency security\n6. Infrastructure security\n7. Business logic vulnerabilities\n\nReturn valid JSON format:\n{{\n  \"summary\": \"Security assessment summary\",\n  \"details\": \"Detailed security analysis\",\n  \"risks\": [\"security risk 1\", \"security risk 2\"],\n  \"recommendations\": [\"security recommendation 1\", \"security recommendation 2\"],\n  \"security_score\": \"HIGH/MEDIUM/LOW risk level\",\n  \"owasp_categories\": [\"A01\", \"A02\", \"etc if applicable\"]\n}}"
+    },
+    {
+      "name": "deep_code_review",
+      "description": "Detailed code review analysis",
+      "category": "quality",
+      "variables": [
+        "commit_hash",
+        "message",
+        "author",
+        "date",
+        "files_changed",
+        "insertions",
+        "deletions"
+      ],
+      "template": "Perform a detailed code review of this git commit. Return JSON with comprehensive code quality analysis.\n\nCommit: {commit_hash}\nMessage: {message}\nAuthor: {author}\nDate: {date}\nFiles changed: {files_changed}\nLines: +{insertions}, -{deletions}\n\nCode Review Criteria:\n1. Code style and conventions\n2. Logic and algorithm efficiency\n3. Error handling and edge cases\n4. Test coverage implications\n5. Documentation quality\n6. Maintainability and readability\n7. Best practices adherence\n\nReturn valid JSON format:\n{{\n  \"summary\": \"Code review summary\",\n  \"details\": \"Detailed code quality analysis\",\n  \"risks\": [\"code quality issue 1\", \"code quality issue 2\"],\n  \"recommendations\": [\"improvement 1\", \"improvement 2\"],\n  \"quality_score\": \"1-10 scale\",\n  \"categories\": {{\"style\": \"rating\", \"logic\": \"rating\", \"maintainability\": \"rating\"}}\n}}"
+    },
+    {
+      "name": "deep_business_impact",
+      "description": "Business impact analysis",
+      "category": "business",
+      "variables": [
+        "commit_hash",
+        "message",
+        "author",
+        "date",
+        "files_changed",
+        "insertions",
+        "deletions"
+      ],
+      "template": "Analyze the business impact of this git commit. Return JSON with business-focused analysis.\n\nCommit: {commit_hash}\nMessage: {message}\nAuthor: {author}\nDate: {date}\nFiles changed: {files_changed}\nLines: +{insertions}, -{deletions}\n\nBusiness Analysis Framework:\n1. User experience impact\n2. Feature completeness\n3. Business process changes\n4. Revenue/cost implications\n5. Compliance and regulatory impact\n6. Stakeholder communication needs\n7. Release and deployment considerations\n\nReturn valid JSON format:\n{{\n  \"summary\": \"Business impact summary\",\n  \"details\": \"Detailed business analysis\",\n  \"risks\": [\"business risk 1\", \"business risk 2\"],\n  \"recommendations\": [\"business recommendation 1\", \"business recommendation 2\"],\n  \"impact_level\": \"HIGH/MEDIUM/LOW business impact\",\n  \"stakeholders\": [\"stakeholder1\", \"stakeholder2\"]\n}}"
+    }
+  ]
+}

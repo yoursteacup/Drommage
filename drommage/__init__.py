@@ -1,24 +1,23 @@
 """
-DRommage - Intelligent Documentation Version Control
+DRommage - AI-Powered Git Commit Analysis
 
-A revolutionary documentation versioning system that combines git-style 
-region tracking with LLM-powered semantic analysis.
+DR (Доктор) + ommage (оммаж к Videodrome) = инструмент для понимания своих git коммитов через ретроспективу
+
+Understanding what you were doing through git retrospection.
 """
 
 __version__ = "1.0.0"
-__author__ = "Claude Code"
+__author__ = "DRommage Contributors"
 
-from .core.diff_tracker import GitDiffEngine
-from .core.region_analyzer import RegionIndex
-from .core.interface import DocTUIView
-from .core.llm_analyzer import LLMAnalyzer, AnalysisLevel, DiffAnalysis, ChangeType
+from .core.engine import DRommageEngine
+from .core.analysis import AnalysisMode, AnalysisResult
+from .core.providers import ProviderManager
+from .core.prompts import PromptManager
 
 __all__ = [
-    "GitDiffEngine",
-    "RegionIndex", 
-    "DocTUIView",
-    "LLMAnalyzer",
-    "AnalysisLevel",
-    "DiffAnalysis",
-    "ChangeType"
+    "DRommageEngine",
+    "AnalysisMode", 
+    "AnalysisResult",
+    "ProviderManager",
+    "PromptManager"
 ]
