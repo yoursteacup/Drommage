@@ -94,18 +94,11 @@ def main():
 def run_tui_interface(engine: DRommageEngine) -> int:
     """Run TUI interface"""
     try:
-        # Import and run existing TUI (for now)
+        # Import and run TUI with new engine integration
         from .core.interface import DocTUIView
-        from .core.diff_tracker import GitDiffEngine  
-        from .core.region_analyzer import RegionIndex
-        
-        # Legacy initialization for now
-        git_engine = GitDiffEngine(docs_dir=None, versions=[])
-        region_index = RegionIndex(git_engine)
-        commits = engine.get_commits()
         
         print("\n📺 Launching TUI interface...\n")
-        tui = DocTUIView(git_engine, region_index, commits, engine.git)
+        tui = DocTUIView(engine)  # ✅ Use new constructor
         tui.run()
         
         return 0
@@ -117,7 +110,13 @@ def run_tui_interface(engine: DRommageEngine) -> int:
 
 def run_cli_interface(engine: DRommageEngine, args) -> int:
     """Run CLI batch interface"""
-    analysis_mode = AnalysisMode(args.analysis)
+    # Map CLI shortcuts to AnalysisMode values
+    mode_mapping = {
+        "pat": "pattern",
+        "brief": "brief", 
+        "deep": "deep"
+    }
+    analysis_mode = AnalysisMode(mode_mapping[args.analysis])
     
     if args.commit:
         # Analyze specific commit

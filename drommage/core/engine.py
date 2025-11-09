@@ -10,6 +10,7 @@ from .git_integration import GitIntegration, GitCommit
 from .analysis import AnalysisMode, AnalysisResult, ChangeType, CommitStats
 from .cache import AnalysisCache
 from .pattern_analyzer import PatternAnalyzer
+from .providers import ProviderManager
 
 
 class DRommageEngine:
@@ -39,7 +40,7 @@ class DRommageEngine:
         # Initialize components
         self._cache = AnalysisCache(self.cache_dir)
         self._pattern_analyzer = PatternAnalyzer()
-        self._llm_provider = None  # Will be loaded from config
+        self._provider_manager = ProviderManager(self.cache_dir)
         
         # State
         self._commits: List[GitCommit] = []
@@ -136,9 +137,9 @@ class DRommageEngine:
         """
         modes = [AnalysisMode.PAT]  # Pattern analysis always available
         
-        # Check LLM availability (when implemented)
-        # if self._llm_provider and self._llm_provider.is_available():
-        #     modes.extend([AnalysisMode.BRIEF, AnalysisMode.DEEP])
+        # Check LLM availability
+        if self._provider_manager.get_available_provider():
+            modes.extend([AnalysisMode.BRIEF, AnalysisMode.DEEP])
         
         return modes
     
@@ -179,26 +180,59 @@ class DRommageEngine:
         """Clean up old cached analysis versions."""
         return self._cache.cleanup_old_versions(keep_versions)
     
+    def get_provider_status(self) -> Dict:
+        """Get status of all configured LLM providers."""
+        providers = self._provider_manager.get_providers()
+        return {
+            "available_provider": bool(self._provider_manager.get_available_provider()),
+            "providers": [
+                {
+                    "name": p.config.name,
+                    "type": p.config.type,
+                    "model": p.config.model,
+                    "available": p.is_available(),
+                    "priority": p.config.priority
+                }
+                for p in providers
+            ]
+        }
+    
+    def test_provider(self, provider_name: str) -> Dict:
+        """Test specific provider."""
+        return self._provider_manager.test_provider(provider_name)
+    
     def _analyze_llm_brief(self, commit: GitCommit) -> AnalysisResult:
         """Analyze commit using brief LLM analysis"""
-        # TODO: Implement LLM provider
+        provider = self._provider_manager.get_available_provider()
+        if provider:
+            result = provider.analyze_brief(commit)
+            if result:
+                return result
+        
+        # Fallback to placeholder
         return AnalysisResult(
             mode=AnalysisMode.BRIEF,
             commit_hash=commit.hash,
-            provider="placeholder",
+            provider="no_provider",
             version=1,
-            summary="Brief LLM analysis not implemented yet"
+            summary="No LLM provider available. Configure with 'drommage config'"
         )
     
     def _analyze_llm_deep(self, commit: GitCommit) -> AnalysisResult:
         """Analyze commit using deep LLM analysis"""
-        # TODO: Implement LLM provider
+        provider = self._provider_manager.get_available_provider()
+        if provider:
+            result = provider.analyze_deep(commit)
+            if result:
+                return result
+        
+        # Fallback to placeholder
         return AnalysisResult(
             mode=AnalysisMode.DEEP,
             commit_hash=commit.hash,
-            provider="placeholder", 
+            provider="no_provider", 
             version=1,
-            summary="Deep LLM analysis not implemented yet"
+            summary="No LLM provider available. Configure with 'drommage config'"
         )
     
     def _detect_change_type_basic(self, commit: GitCommit) -> ChangeType:

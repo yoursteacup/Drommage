@@ -11,6 +11,8 @@ from .region_analyzer import RegionIndex
 from .llm_analyzer import LLMAnalyzer, AnalysisLevel, DiffAnalysis, ChangeType
 from .analysis_queue import AnalysisQueue, AnalysisTask, TaskStatus as AnalysisTaskStatus
 from .git_integration import GitIntegration, GitCommit
+from .engine import DRommageEngine
+from .analysis import AnalysisMode, AnalysisResult
 import uuid
 import time
 import subprocess
@@ -39,33 +41,54 @@ BOX = {
 }
 
 class DocTUIView:
-    def __init__(self, engine: GitDiffEngine, region_index: RegionIndex, commits: List[GitCommit], git_integration: GitIntegration):
-        self.engine = engine
-        self.region_index = region_index
-        self.commits = commits
-        self.git = git_integration
+    def __init__(self, drommage_engine):
+        """
+        Initialize TUI with DRommageEngine.
         
-        # Initialize LLM analyzer and async queue
-        self.llm = LLMAnalyzer(model="mistral:latest")
-        self.analysis_queue = AnalysisQueue(self.llm)
-        self.analysis_queue.start()
+        Args:
+            drommage_engine: DRommageEngine instance for analysis
+        """
+        # Use new DRommageEngine instead of old components
+        self.drommage_engine = drommage_engine
+        self.commits = []  # Will be loaded from engine
         
+        # Legacy components (remove gradually)
+        self.engine = None  # Old GitDiffEngine
+        self.region_index = None  # Old RegionIndex  
+        self.git = drommage_engine.git  # Use git from engine
         
-        self.llm_cache = {}  # Cache for LLM analyses
+        # Remove old LLM initialization - use engine instead
+        # self.llm = LLMAnalyzer(model="mistral:latest")  # ❌ REMOVED
+        # self.analysis_queue = AnalysisQueue(self.llm)   # ❌ REMOVED
+        # self.analysis_queue.start()                     # ❌ REMOVED
         
-        # Initialize cache directory and load existing cache
-        self._init_cache()
+        # Remove old JSON cache - use SQLite through engine
+        # self.llm_cache = {}  # ❌ REMOVED
+        # self._init_cache()   # ❌ REMOVED
+        
+        # Load commits from engine
+        self.commits = self.drommage_engine.load_commits(50)
         
         # UI state
-        self.selected_commit_idx = 0 if commits else -1
+        self.selected_commit_idx = 0 if self.commits else -1
         self.selected_region = None
         self.mode = "view"  # view, region_detail, llm_detail, queue
+        self.analysis_mode = AnalysisMode.PAT  # Current analysis mode: PAT → BRIEF → DEEP
         self.right_scroll = 0
         self.commit_scroll = 0  # Horizontal scroll for commit list
         self.commit_page_offset = 0  # Current page offset for commits
         self.status = ""
-        self.current_analyses = {"brief": None, "deep": None}  # Separate analyses
-        self.active_tasks = []  # Track running analysis tasks
+        
+        # Replace old analysis tracking with new system
+        self.current_analyses = {
+            AnalysisMode.PAT: {},    # {commit_hash: AnalysisResult}
+            AnalysisMode.BRIEF: {},  # {commit_hash: AnalysisResult}  
+            AnalysisMode.DEEP: {}    # {commit_hash: AnalysisResult}
+        }
+        
+        # Remove old task tracking - engine handles this
+        # self.active_tasks = []  # ❌ REMOVED
+        
         self.animation_frame = 0  # For animated indicators
         self.page_flip_animation = {"active": False, "start_time": 0, "direction": ""}  # Page flip animation
         self.analysis_scroll = 0  # Scroll position for analysis panel
@@ -134,7 +157,7 @@ class DocTUIView:
         self.scr = scr
         
         # Try to load cached analyses for the current version
-        self._load_cached_analyses()
+        self._load_analyses_from_engine()
         if not any(self.current_analyses.values()):
             self.status = ""
         else:
@@ -338,44 +361,52 @@ class DocTUIView:
             if actual_idx < len(self.commits) - 1:
                 prev_short_hash = self.commits[actual_idx + 1].short_hash
             
-            analysis_status = self.analysis_queue.get_commit_analysis_status(
-                commit.hash, commit.short_hash, prev_short_hash)
-            brief_status = analysis_status.get("brief")
-            deep_status = analysis_status.get("deep")
+            # Check analysis status using new system
+            pat_status = "completed" if commit.hash in self.current_analyses[AnalysisMode.PAT] else None
+            brief_status = "completed" if commit.hash in self.current_analyses[AnalysisMode.BRIEF] else None
+            deep_status = "completed" if commit.hash in self.current_analyses[AnalysisMode.DEEP] else None
             
-            # Also check cache for completed analyses
-            if not brief_status and actual_idx < len(self.commits) - 1:
-                prev_hash = self.commits[actual_idx+1].hash
-                brief_key = f"{prev_hash}_{commit.hash}_brief"
-                if brief_key in self.llm_cache:
-                    brief_status = "completed"
-                    
-            if not deep_status and actual_idx < len(self.commits) - 1:
-                prev_hash = self.commits[actual_idx+1].hash  
-                deep_key = f"{prev_hash}_{commit.hash}_detailed"
-                if deep_key in self.llm_cache:
-                    deep_status = "completed"
+            # Check if current commit is being analyzed
+            is_current = (actual_idx == self.selected_commit_idx)
+            if is_current and self.status and "🔄" in self.status:
+                if self.analysis_mode == AnalysisMode.PAT:
+                    pat_status = "running"
+                elif self.analysis_mode == AnalysisMode.BRIEF:
+                    brief_status = "running" 
+                elif self.analysis_mode == AnalysisMode.DEEP:
+                    deep_status = "running"
             
-            # Show both brief (d) and deep (D) indicators when available
+            # Show PAT/BRIEF/DEEP indicators with current mode highlighted
+            pat_indicator = ""
             brief_indicator = ""
             deep_indicator = ""
             
-            if brief_status:
-                # Brief analysis - use lowercase d
-                brief_indicator = self._get_status_indicator(brief_status, "d")
-            elif actual_idx == self.selected_commit_idx:
-                # Show default button for selected commit
-                brief_indicator = " d "
-            
-            if deep_status:
-                # Deep analysis - use uppercase D  
-                deep_indicator = self._get_status_indicator(deep_status, "D")
-            elif actual_idx == self.selected_commit_idx:
-                # Always show D button for selected commit (regardless of brief status)
-                deep_indicator = " D "
+            # Show indicators for current commit
+            if actual_idx == self.selected_commit_idx:
+                # Show current mode prominently
+                if self.analysis_mode == AnalysisMode.PAT:
+                    pat_indicator = self._get_status_indicator(pat_status, "P")
+                    brief_indicator = " b "
+                    deep_indicator = " d "
+                elif self.analysis_mode == AnalysisMode.BRIEF:
+                    pat_indicator = " p "
+                    brief_indicator = self._get_status_indicator(brief_status, "B")
+                    deep_indicator = " d "
+                else:  # DEEP
+                    pat_indicator = " p "
+                    brief_indicator = " b "
+                    deep_indicator = self._get_status_indicator(deep_status, "D")
+            else:
+                # For non-selected commits, show status if available
+                if pat_status:
+                    pat_indicator = self._get_status_indicator(pat_status, "p")
+                if brief_status:
+                    brief_indicator = self._get_status_indicator(brief_status, "b")
+                if deep_status:
+                    deep_indicator = self._get_status_indicator(deep_status, "d")
             
             # Combine indicators
-            indicators = brief_indicator + deep_indicator
+            indicators = pat_indicator + brief_indicator + deep_indicator
             
             # Calculate how much space we need for indicators
             indicator_space = len(indicators) + 1 if indicators else 0
@@ -476,38 +507,45 @@ class DocTUIView:
             
         current_commit = self.commits[self.selected_commit_idx]
         
-        # Header
-        scr.addstr(y, x, "📝 Brief Analysis", curses.A_BOLD | curses.color_pair(PALETTE["title"]))
+        # Header with current analysis mode
+        mode_icons = {
+            AnalysisMode.PAT: "🔍",
+            AnalysisMode.BRIEF: "📝", 
+            AnalysisMode.DEEP: "📊"
+        }
+        mode_title = f"{mode_icons[self.analysis_mode]} {self.analysis_mode.value.title()} Analysis"
+        scr.addstr(y, x, mode_title, curses.A_BOLD | curses.color_pair(PALETTE["title"]))
         y += 2
         
-        # Check if we're currently analyzing
-        is_analyzing = self.status and any(indicator in self.status for indicator in ["🤖", "📊", "📝", "⏱️", "🔄"])
+        # Get analysis for current mode and commit
+        current_analysis = None
+        if current_commit.hash in self.current_analyses[self.analysis_mode]:
+            current_analysis = self.current_analyses[self.analysis_mode][current_commit.hash]
         
-        # Get or generate analysis (show brief by default, deep in detailed mode)
-        analysis_type = "deep" if self.mode == "llm_detail" else "brief"
-        current_analysis = self.current_analyses.get(analysis_type)
+        # Check if analysis is in progress (status contains processing indicators)
+        is_analyzing = self.status and "🔄" in self.status
         
-        # Try to get ANY available analysis if preferred one is not available
-        if not current_analysis:
-            # Try brief if we were looking for deep
-            if analysis_type == "deep":
-                current_analysis = self.current_analyses.get("brief")
-                if current_analysis:
-                    analysis_type = "brief"
-            # Try deep if we were looking for brief
-            else:
-                current_analysis = self.current_analyses.get("deep") 
-                if current_analysis:
-                    analysis_type = "deep"
-        
-        # Check if the requested analysis type is currently running
-        is_current_type_running = self._is_analysis_type_running(analysis_type)
-        
-        if is_current_type_running and not current_analysis:
-            # Show analysis in progress for this specific type
-            type_label = "📊 Deep Analysis" if analysis_type == "deep" else "📝 Brief Analysis"
-            scr.addstr(y, x, type_label, curses.color_pair(PALETTE["icon"]) | curses.A_BOLD)
+        if current_analysis:
+            # Show completed analysis using AnalysisResult format
+            provider_info = f"Provider: {current_analysis.provider}"
+            scr.addstr(y, x, provider_info, curses.color_pair(PALETTE["dim"]))
             y += 1
+            
+            # Mode and status
+            mode_text = f"Mode: {current_analysis.mode.value.upper()}"
+            scr.addstr(y, x, mode_text, curses.color_pair(PALETTE["icon"]))
+            y += 1
+            
+            # Change type if available in metadata
+            if 'change_type' in current_analysis.metadata:
+                change_type = current_analysis.metadata['change_type']
+                scr.addstr(y, x, f"Type: {change_type}", curses.color_pair(PALETTE["icon"]))
+                y += 1
+            
+            y += 1  # Spacing
+            
+        elif is_analyzing:
+            # Show analysis in progress
             scr.addstr(y, x, "⏳ Analysis in progress...", curses.color_pair(PALETTE["modified"]) | curses.A_BOLD)
             y += 2
             
@@ -517,32 +555,12 @@ class DocTUIView:
             frame = anim_frames[int(time.time() * 2) % len(anim_frames)]
             scr.addstr(y, x, f"{frame} Processing...", curses.color_pair(PALETTE["dim"]))
             return
-        elif current_analysis:
-            # Show completed analysis
-            type_label = "📊 Deep Analysis" if analysis_type == "deep" else "📝 Brief Analysis"
-            scr.addstr(y, x, type_label, curses.color_pair(PALETTE["icon"]) | curses.A_BOLD)
-            y += 1
         else:
-            # Show no analysis message
-            self._draw_no_analysis_message(scr, y, x, w, h)
+            # No analysis yet - show instructions
+            scr.addstr(y, x, "Press 'd' to start analysis", curses.color_pair(PALETTE["dim"]))
+            y += 1
+            scr.addstr(y, x, "or use arrow keys to navigate", curses.color_pair(PALETTE["dim"]))
             return
-            
-        # Type
-        try:
-            type_text = f"Type: {current_analysis.change_type.name}"
-        except:
-            type_text = "Type: UNKNOWN"
-        scr.addstr(y, x, type_text, curses.color_pair(PALETTE["icon"]))
-        y += 1
-        
-        # Impact
-        impact_bars = {"low": "▁▁▁", "medium": "▃▃▃", "high": "▇▇▇"}
-        impact_color = {"low": PALETTE["stable"], "medium": PALETTE["modified"], "high": PALETTE["volatile"]}
-        bars = impact_bars.get(current_analysis.impact_level, "▁▁▁")
-        color = impact_color.get(current_analysis.impact_level, PALETTE["dim"])
-        scr.addstr(y, x, f"Impact: {bars} {current_analysis.impact_level}", 
-                  curses.color_pair(color))
-        y += 2
         
         # Summary
         scr.addstr(y, x, "Summary:", curses.A_BOLD)
@@ -1388,13 +1406,13 @@ class DocTUIView:
                 self._navigate_up()
                 self.right_scroll = 0
                 self.analysis_scroll = 0  # Reset analysis scroll
-                self._load_cached_analyses()
+                self._load_analyses_from_engine()
                 
             elif ch in (curses.KEY_DOWN, ord('j')):
                 self._navigate_down()
                 self.right_scroll = 0
                 self.analysis_scroll = 0  # Reset analysis scroll
-                self._load_cached_analyses()
+                self._load_analyses_from_engine()
             elif ch in (ord('d'), ord('D')):
                 # Smart D button logic
                 self._handle_d_button()
@@ -1448,12 +1466,12 @@ class DocTUIView:
                 self._navigate_up()
                 self.right_scroll = 0
                 self.analysis_scroll = 0  # Reset analysis scroll
-                self._load_cached_analyses()
+                self._load_analyses_from_engine()
             elif ch in (curses.KEY_DOWN, ord('j')):
                 self._navigate_down()
                 self.right_scroll = 0
                 self.analysis_scroll = 0  # Reset analysis scroll
-                self._load_cached_analyses()
+                self._load_analyses_from_engine()
             elif ch in (ord('d'), ord('D')):
                 # Smart D button logic
                 self._handle_d_button()
@@ -1587,409 +1605,6 @@ class DocTUIView:
         
         scr.refresh()
     
-    def _load_cached_analyses(self):
-        """Load cached analyses if available"""
-        if not self.commits or self.selected_commit_idx < 0:
-            self.current_analyses = {"brief": None, "deep": None}
-            self.status = "No commits available"
-            return
-            
-        if self.selected_commit_idx >= len(self.commits) - 1:
-            # Last commit - no previous to compare  
-            initial_analysis = DiffAnalysis(
-                summary="Initial commit of the repository",
-                change_type=ChangeType.DOCUMENTATION,
-                impact_level="low",
-                confidence=1.0
-            )
-            self.current_analyses = {"brief": initial_analysis, "deep": initial_analysis}
-            return
-        
-        # Get commits for diff
-        current_commit = self.commits[self.selected_commit_idx]
-        prev_commit = self.commits[self.selected_commit_idx + 1]  # Git history is reverse chronological
-        
-        # Check cache for both types of analysis
-        brief_key = f"{prev_commit.hash}_{current_commit.hash}_{AnalysisLevel.BRIEF.value}"
-        deep_key = f"{prev_commit.hash}_{current_commit.hash}_{AnalysisLevel.DETAILED.value}"
-        
-        # Load cached analyses with correct mapping
-        brief_analysis = self.llm_cache.get(brief_key)
-        deep_analysis = self.llm_cache.get(deep_key)
-        
-        self.current_analyses = {
-            "brief": brief_analysis,
-            "deep": deep_analysis
-        }
-        
-        if self.current_analyses["brief"] or self.current_analyses["deep"]:
-            self.status = ""  # Clear status when we have analyses - they show in panel
-        else:
-            self.status = ""
-    
-    def _word_wrap(self, text: str, width: int) -> List[str]:
-        """Simple word wrapping"""
-        if not text:
-            return []
-        
-        words = text.split()
-        lines = []
-        current_line = []
-        current_length = 0
-        
-        for word in words:
-            word_length = len(word)
-            if current_length + word_length + 1 <= width:
-                current_line.append(word)
-                current_length += word_length + 1
-            else:
-                if current_line:
-                    lines.append(" ".join(current_line))
-                current_line = [word]
-                current_length = word_length
-        
-        if current_line:
-            lines.append(" ".join(current_line))
-        
-        return lines
-    
-    def _queue_analysis(self, level: AnalysisLevel):
-        """Queue analysis task for current commit"""
-        if self.selected_commit_idx < 0 or self.selected_commit_idx >= len(self.commits):
-            self.status = "❌ No commit selected"
-            return
-        
-        current_commit = self.commits[self.selected_commit_idx]
-        
-        # Get previous commit for diff
-        if self.selected_commit_idx < len(self.commits) - 1:
-            prev_commit = self.commits[self.selected_commit_idx + 1]
-        else:
-            self.status = "❌ No previous commit to compare"
-            return
-        
-        # Check if analysis already exists or is in progress
-        cache_key = f"{prev_commit.hash}_{current_commit.hash}_{level.value}"
-        if cache_key in self.llm_cache:
-            self.status = f"📦 {level.value.title()} analysis already cached"
-            return
-        
-        # Check if already queued/running
-        context_pattern = f"{prev_commit.short_hash}→{current_commit.short_hash}"
-        for task in self.analysis_queue.tasks.values():
-            if (context_pattern in task.context and 
-                task.level == level and 
-                task.status.value in ["pending", "running"]):
-                self.status = f"🔄 {level.value.title()} analysis already {task.status.value}"
-                return
-        
-        # Get diff
-        diff = self.git.get_commit_diff(prev_commit.hash, current_commit.hash)
-        if not diff:
-            self.status = "❌ Could not get commit diff"
-            return
-        
-        if not diff.diff_text:
-            self.status = "❌ Empty diff"
-            return
-        
-        # Create task
-        task_id = str(uuid.uuid4())[:8]
-        context = f"{prev_commit.short_hash}→{current_commit.short_hash}: {current_commit.message[:30]}"
-        
-        def on_complete(result: DiffAnalysis):
-            try:
-                # Store result and update cache
-                
-                # Cache first
-                cache_key = f"{prev_commit.hash}_{current_commit.hash}_{level.value}"
-                self.llm_cache[cache_key] = result
-                # Save cache to disk
-                self._save_cache()
-                
-                # ПРИНУДИТЕЛЬНО обновить current_analyses прямо сейчас
-                if self.selected_commit_idx < len(self.commits):
-                    selected_hash = self.commits[self.selected_commit_idx].hash
-                    if selected_hash == current_commit.hash:
-                        # Правильное соответствие значений level и ключей 
-                        if level.value == "brief":
-                            analysis_key = "brief"
-                        elif level.value == "detailed":  # AnalysisLevel.DETAILED.value == "detailed"
-                            analysis_key = "deep"
-                        else:
-                            analysis_key = "brief"  # fallback
-                        self.current_analyses[analysis_key] = result
-                        # Clear status so analysis shows in panel, not status bar
-                        self.status = ""
-                
-                # Let the main loop handle display updates to avoid overlapping draws
-                    
-            except Exception as e:
-                self.status = f"❌ Callback error: {str(e)[:40]}"
-        
-        def status_update(msg: str):
-            self.status = msg
-            # Let main loop handle UI updates for smoother experience
-        
-        # Get file contents for proper analysis
-        prev_content = ""
-        curr_content = ""
-        
-        # Try to get representative file content from the diff
-        if diff.files:
-            # Get content of the first changed file as representative
-            main_file = diff.files[0]
-            
-            prev_file_content = self.git.get_file_content_at_commit(prev_commit.hash, main_file)
-            curr_file_content = self.git.get_file_content_at_commit(current_commit.hash, main_file)
-            
-            if prev_file_content is not None:
-                prev_content = prev_file_content
-                
-            if curr_file_content is not None:
-                curr_content = curr_file_content
-        
-        # If we can't get file contents, use the diff as new_text
-        if not curr_content:
-            curr_content = diff.diff_text
-        
-        task = AnalysisTask(
-            id=task_id,
-            old_text=prev_content,
-            new_text=curr_content,
-            context=context,
-            level=level,
-            callback=on_complete,
-            status_callback=status_update
-        )
-        
-        self.analysis_queue.add_task(task)
-        self.status = f"🔄 Queued {level.value} analysis: {context}"
-        
-        # Force immediate status update for user feedback
-        if hasattr(self, 'scr') and self.scr:
-            try:
-                self._draw_status_bar(self.scr, self.scr.getmaxyx()[0] - 1, self.scr.getmaxyx()[1])
-                self.scr.refresh()
-            except:
-                pass
-    
-    def _handle_d_button(self):
-        """Smart D button: starts brief → deep → toggles view"""
-        if self.selected_commit_idx < 0 or self.selected_commit_idx >= len(self.commits):
-            return
-        
-        # Allow switching even if analysis is running - just show what we have
-        
-        current_commit = self.commits[self.selected_commit_idx]
-        brief_analysis = self.current_analyses.get("brief")
-        deep_analysis = self.current_analyses.get("deep")
-        
-        if not brief_analysis:
-            # No analysis yet - start brief
-            self._queue_analysis(AnalysisLevel.BRIEF)
-        elif not deep_analysis:
-            # Have brief, no deep - start deep
-            self._queue_analysis(AnalysisLevel.DETAILED)
-        else:
-            # Have both - toggle view between brief and deep
-            if self.mode == "llm_detail":
-                self.mode = "view"  # Switch to brief view
-                self.status = "📝 Showing brief analysis"
-            else:
-                self.mode = "llm_detail"  # Switch to deep view  
-                self.status = "📊 Showing deep analysis"
-            # Force refresh of current analyses
-            self._load_cached_analyses()
-    
-    def _copy_to_clipboard(self, text: str):
-        """Copy text to system clipboard"""
-        try:
-            # Try different clipboard commands
-            if subprocess.run(["which", "pbcopy"], capture_output=True).returncode == 0:
-                # macOS
-                subprocess.run(["pbcopy"], input=text.encode(), check=True)
-            elif subprocess.run(["which", "xclip"], capture_output=True).returncode == 0:
-                # Linux with xclip
-                subprocess.run(["xclip", "-selection", "clipboard"], input=text.encode(), check=True)
-            elif subprocess.run(["which", "xsel"], capture_output=True).returncode == 0:
-                # Linux with xsel
-                subprocess.run(["xsel", "--clipboard", "--input"], input=text.encode(), check=True)
-            else:
-                self.status = "❌ No clipboard utility found (install pbcopy/xclip/xsel)"
-                return False
-            return True
-        except Exception as e:
-            self.status = f"❌ Copy failed: {str(e)[:30]}"
-            return False
-    
-    def _copy_commits(self):
-        """Copy commit list to clipboard (i key)"""
-        if not self.commits:
-            self.status = "❌ No commits to copy"
-            return
-            
-        lines = []
-        for commit in self.commits:
-            lines.append(f"{commit.short_hash} {commit.message}")
-        
-        text = "\n".join(lines)
-        if self._copy_to_clipboard(text):
-            self.status = f"📋 Copied {len(self.commits)} commits to clipboard"
-    
-    def _copy_analysis(self):
-        """Copy current analysis to clipboard (o key)"""
-        if not self.current_analyses:
-            self.status = "❌ No analysis to copy"
-            return
-            
-        lines = []
-        
-        # Add brief if available
-        brief = self.current_analyses.get("brief")
-        if brief:
-            lines.append("=== BRIEF ANALYSIS ===")
-            lines.append(f"Summary: {brief.summary}")
-            lines.append(f"Type: {brief.change_type.name}")
-            lines.append(f"Impact: {brief.impact_level}")
-            if brief.details:
-                lines.append(f"Details: {brief.details}")
-            lines.append("")
-        
-        # Add deep if available  
-        deep = self.current_analyses.get("deep")
-        if deep:
-            lines.append("=== DEEP ANALYSIS ===")
-            lines.append(f"Summary: {deep.summary}")
-            lines.append(f"Type: {deep.change_type.name}")
-            lines.append(f"Impact: {deep.impact_level}")
-            if deep.details:
-                lines.append(f"Details: {deep.details}")
-            if deep.risks:
-                lines.append("Risks:")
-                for risk in deep.risks:
-                    lines.append(f"  - {risk}")
-            if deep.recommendations:
-                lines.append("Recommendations:")
-                for rec in deep.recommendations:
-                    lines.append(f"  - {rec}")
-        
-        text = "\n".join(lines)
-        if self._copy_to_clipboard(text):
-            self.status = "📋 Copied analysis to clipboard"
-    
-    def _copy_diff(self):
-        """Copy current diff to clipboard (p key)"""
-        if self.selected_commit_idx < 0 or self.selected_commit_idx >= len(self.commits):
-            self.status = "❌ No commit selected"
-            return
-            
-        current_commit = self.commits[self.selected_commit_idx]
-        
-        # Get previous commit for diff
-        if self.selected_commit_idx < len(self.commits) - 1:
-            prev_commit = self.commits[self.selected_commit_idx + 1]
-        else:
-            self.status = "❌ No previous commit for diff"
-            return
-        
-        # Get diff
-        diff = self.git.get_commit_diff(prev_commit.hash, current_commit.hash)
-        if not diff or not diff.diff_text:
-            self.status = "❌ No diff available"
-            return
-        
-        # Format diff with header
-        lines = [
-            f"Commit: {current_commit.short_hash} {current_commit.message}",
-            f"Author: {current_commit.author}",
-            f"Date: {current_commit.date}",
-            "",
-            diff.diff_text
-        ]
-        
-        text = "\n".join(lines)
-        if self._copy_to_clipboard(text):
-            self.status = "📋 Copied diff to clipboard"
-    
-    def _init_cache(self):
-        """Initialize cache directory and load existing cache from disk"""
-        import json
-        from pathlib import Path
-        
-        # Create cache directory if it doesn't exist
-        self.cache_dir = Path(".drommage")
-        self.cache_dir.mkdir(exist_ok=True)
-        
-        # Cache file path
-        self.cache_file = self.cache_dir / "llm_cache.json"
-        
-        # Load existing cache
-        self._load_cache()
-        
-        # Save initial empty cache if doesn't exist
-        if not self.cache_file.exists():
-            self._save_cache()
-    
-    def _load_cache(self):
-        """Load LLM cache from disk"""
-        import json
-        
-        try:
-            if self.cache_file.exists():
-                with open(self.cache_file, 'r', encoding='utf-8') as f:
-                    self.llm_cache = json.load(f)
-                    # Convert string values back to DiffAnalysis objects
-                    from drommage.core.llm_analyzer import DiffAnalysis, ChangeType
-                    for key, data in self.llm_cache.items():
-                        if isinstance(data, dict) and 'summary' in data:
-                            try:
-                                # Reconstruct DiffAnalysis object
-                                analysis = DiffAnalysis(
-                                    summary=data.get('summary', ''),
-                                    change_type=ChangeType(data.get('change_type', 'UNKNOWN')),
-                                    impact_level=data.get('impact_level', 'low'),
-                                    confidence=data.get('confidence', 0.0),
-                                    details=data.get('details', ''),
-                                    risks=data.get('risks', []),
-                                    recommendations=data.get('recommendations', [])
-                                )
-                                self.llm_cache[key] = analysis
-                            except Exception as e:
-                                # Remove corrupted cache entries
-                                del self.llm_cache[key]
-            else:
-                self.llm_cache = {}
-        except Exception as e:
-            print(f"❌ Error loading cache: {e}")
-            self.llm_cache = {}
-    
-    def _save_cache(self):
-        """Save LLM cache to disk"""
-        import json
-        
-        try:
-            # Convert DiffAnalysis objects to dicts for JSON serialization
-            cache_data = {}
-            for key, analysis in self.llm_cache.items():
-                if hasattr(analysis, 'summary'):  # It's a DiffAnalysis object
-                    cache_data[key] = {
-                        'summary': analysis.summary,
-                        'change_type': analysis.change_type.value if hasattr(analysis.change_type, 'value') else str(analysis.change_type),
-                        'impact_level': analysis.impact_level,
-                        'confidence': analysis.confidence,
-                        'details': getattr(analysis, 'details', ''),
-                        'risks': getattr(analysis, 'risks', []),
-                        'recommendations': getattr(analysis, 'recommendations', [])
-                    }
-                else:
-                    cache_data[key] = analysis  # Already serializable
-            
-            with open(self.cache_file, 'w', encoding='utf-8') as f:
-                json.dump(cache_data, f, indent=2, ensure_ascii=False)
-        except Exception as e:
-            print(f"❌ Error saving cache: {e}")
-    
     def _get_page_size(self):
         """Calculate current page size based on panel dimensions"""
         if hasattr(self, 'scr'):
@@ -2074,7 +1689,7 @@ class DocTUIView:
             self.commit_page_offset = new_page_start
             # Select first item of the new page
             self.selected_commit_idx = new_page_start
-            self._load_cached_analyses()
+            self._load_analyses_from_engine()
     
     def _flip_page_down(self):
         """Quick page flip down (e key)"""
@@ -2093,7 +1708,102 @@ class DocTUIView:
                 self.commit_page_offset = new_page_start
                 # Select first item of the new page
                 self.selected_commit_idx = new_page_start
-                self._load_cached_analyses()
+                self._load_analyses_from_engine()
+    
+    def _load_analyses_from_engine(self):
+        """Load cached analyses for current commit from DRommageEngine"""
+        if self.selected_commit_idx < 0 or self.selected_commit_idx >= len(self.commits):
+            return
+            
+        current_commit = self.commits[self.selected_commit_idx]
+        
+        # Try to load each analysis mode from engine cache
+        for mode in [AnalysisMode.PAT, AnalysisMode.BRIEF, AnalysisMode.DEEP]:
+            if current_commit.hash not in self.current_analyses[mode]:
+                # Check if engine has cached result
+                cached_result = self.drommage_engine._cache.get_analysis(current_commit.hash, mode)
+                if cached_result:
+                    self.current_analyses[mode][current_commit.hash] = cached_result
+    
+    def _queue_analysis(self, mode: AnalysisMode):
+        """Queue analysis task for current commit using DRommageEngine"""
+        if self.selected_commit_idx < 0 or self.selected_commit_idx >= len(self.commits):
+            self.status = "❌ No commit selected"
+            return
+        
+        current_commit = self.commits[self.selected_commit_idx]
+        
+        # Check if analysis already exists in our cache
+        if current_commit.hash in self.current_analyses[mode]:
+            self.status = f"📦 {mode.value.title()} analysis already available"
+            return
+        
+        # Use DRommageEngine for analysis
+        try:
+            self.status = f"🔄 Running {mode.value} analysis..."
+            result = self.drommage_engine.analyze_commit(current_commit.hash, mode)
+            
+            if result:
+                # Store result in local cache for UI
+                self.current_analyses[mode][current_commit.hash] = result
+                self.status = f"✅ {mode.value.title()} analysis complete"
+            else:
+                self.status = f"❌ {mode.value.title()} analysis failed"
+                
+        except Exception as e:
+            self.status = f"❌ Analysis error: {str(e)[:50]}"
+    
+    def _handle_d_button(self):
+        """Toggle analysis mode: PAT → BRIEF → DEEP → PAT (always available)"""
+        if self.selected_commit_idx < 0 or self.selected_commit_idx >= len(self.commits):
+            return
+        
+        # Toggle analysis mode in cycle: PAT → BRIEF → DEEP → PAT
+        # This ALWAYS works, even during analysis
+        if self.analysis_mode == AnalysisMode.PAT:
+            self.analysis_mode = AnalysisMode.BRIEF
+            self.status = "📝 Switched to BRIEF analysis"
+        elif self.analysis_mode == AnalysisMode.BRIEF:
+            self.analysis_mode = AnalysisMode.DEEP
+            self.status = "📊 Switched to DEEP analysis"
+        else:  # DEEP
+            self.analysis_mode = AnalysisMode.PAT
+            self.status = "🔍 Switched to PAT analysis"
+        
+        # Start analysis for current mode if not available yet
+        current_commit = self.commits[self.selected_commit_idx]
+        if current_commit.hash not in self.current_analyses[self.analysis_mode]:
+            self._queue_analysis(self.analysis_mode)
+        else:
+            # Analysis already available - just show it
+            self.status = f"✅ {self.analysis_mode.value.title()} analysis ready"
+    
+    def _word_wrap(self, text: str, width: int) -> list:
+        """Simple word wrap for text display"""
+        if not text:
+            return []
+        
+        lines = []
+        words = text.split()
+        current_line = []
+        current_length = 0
+        
+        for word in words:
+            word_length = len(word)
+            
+            if current_length + word_length + len(current_line) <= width:
+                current_line.append(word)
+                current_length += word_length
+            else:
+                if current_line:
+                    lines.append(" ".join(current_line))
+                current_line = [word]
+                current_length = word_length
+        
+        if current_line:
+            lines.append(" ".join(current_line))
+        
+        return lines
     
     def _start_page_flip_animation(self, direction):
         """Start page flip animation"""
