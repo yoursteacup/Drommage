@@ -88,6 +88,9 @@ class DocTUIView:
             AnalysisMode.DEEP: {}    # {commit_hash: AnalysisResult}
         }
         
+        # Load all cached analyses at startup for global status display
+        self._load_all_cached_analyses()
+        
         # Async analysis system
         self.running_analyses = {}  # {(commit_hash, mode): thread}
         self.analysis_queue = queue.Queue()
@@ -1722,6 +1725,19 @@ class DocTUIView:
                 # Select first item of the new page
                 self.selected_commit_idx = new_page_start
                 self._load_analyses_from_engine()
+    
+    def _load_all_cached_analyses(self):
+        """Load all cached analyses for all commits at startup"""
+        if not self.commits:
+            return
+            
+        # Load cached analyses for all commits to show accurate status indicators
+        for commit in self.commits:
+            for mode in [AnalysisMode.PAT, AnalysisMode.BRIEF, AnalysisMode.DEEP]:
+                # Check if engine has cached result
+                cached_result = self.drommage_engine._cache.get_analysis(commit.hash, mode)
+                if cached_result:
+                    self.current_analyses[mode][commit.hash] = cached_result
     
     def _load_analyses_from_engine(self):
         """Load cached analyses for current commit from DRommageEngine"""
