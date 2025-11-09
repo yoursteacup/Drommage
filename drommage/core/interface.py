@@ -1432,10 +1432,6 @@ class DocTUIView:
                 self._handle_d_button()
             elif ch == ord('Q'):
                 return False  # Quit
-            elif ch in (ord('r'), ord('R')):
-                # Toggle region detail mode
-                if self.selected_region:
-                    self.mode = "region_detail"
             elif ch == curses.KEY_RIGHT:
                 # Scroll diff right with bounds checking
                 if self.commits and self.selected_commit_idx >= 0 and self.selected_commit_idx < len(self.commits) - 1:

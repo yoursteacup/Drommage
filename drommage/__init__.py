@@ -6,7 +6,7 @@ DR (Доктор) + ommage (оммаж к Videodrome) = инструмент д�
 Understanding what you were doing through git retrospection.
 """
 
-__version__ = "1.0.2"
+__version__ = "1.0.3"
 __author__ = "DRommage Contributors"
 
 from .core.engine import DRommageEngine
