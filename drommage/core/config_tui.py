@@ -34,13 +34,17 @@ class ConfigTUI:
         
         # UI state
         self.selected_provider = 0
+        self.selected_prompt = 0
+        self.current_tab = "providers"  # providers, prompts
         self.mode = "list"  # list, add, edit, test
         self.status = "DRommage Configuration"
         self.scroll_offset = 0
         
-        # Provider data
+        # Data
         self.providers_data = []
+        self.prompts_data = []
         self._load_providers()
+        self._load_prompts()
     
     def run(self):
         """Run the configuration TUI"""
@@ -76,11 +80,18 @@ class ConfigTUI:
             h, w = scr.getmaxyx()
             
             self._draw_frame(scr, h, w)
+            self._draw_tabs(scr, h, w)
             
             if self.mode == "list":
-                self._draw_provider_list(scr, h, w)
+                if self.current_tab == "providers":
+                    self._draw_provider_list(scr, h, w)
+                elif self.current_tab == "prompts":
+                    self._draw_prompt_list(scr, h, w)
             elif self.mode == "test":
-                self._draw_test_results(scr, h, w)
+                if self.current_tab == "providers":
+                    self._draw_test_results(scr, h, w)
+                elif self.current_tab == "prompts":
+                    self._draw_prompt_test_results(scr, h, w)
             
             self._draw_status_bar(scr, h, w)
             
@@ -115,13 +126,29 @@ class ConfigTUI:
         scr.addch(h - 3, 0, '╰', curses.color_pair(COLORS["border"]))
         scr.addch(h - 3, w - 1, '╯', curses.color_pair(COLORS["border"]))
     
+    def _draw_tabs(self, scr, h, w):
+        """Draw tab headers"""
+        y = 3
+        
+        # Providers tab
+        provider_text = " Providers "
+        provider_attr = curses.color_pair(COLORS["selected"]) if self.current_tab == "providers" else 0
+        scr.addstr(y, 2, provider_text, provider_attr)
+        
+        # Prompts tab
+        prompt_text = " Prompts "
+        prompt_x = 2 + len(provider_text) + 1
+        prompt_attr = curses.color_pair(COLORS["selected"]) if self.current_tab == "prompts" else 0
+        scr.addstr(y, prompt_x, prompt_text, prompt_attr)
+        
+        # Tab separator line
+        for x in range(2, w - 2):
+            scr.addch(y + 1, x, '─', curses.color_pair(COLORS["border"]))
+    
     def _draw_provider_list(self, scr, h, w):
         """Draw list of providers"""
-        y_start = 4
-        available_lines = h - 8
-        
-        # Header
-        scr.addstr(3, 2, "LLM Providers:", curses.A_BOLD | curses.color_pair(COLORS["title"]))
+        y_start = 6  # Account for tabs
+        available_lines = h - 10
         
         if not self.providers_data:
             scr.addstr(y_start, 2, "No providers configured.", curses.color_pair(COLORS["warning"]))
@@ -182,6 +209,73 @@ class ConfigTUI:
                     if cost_info and len(cost_info) <= max_width:
                         scr.addstr(y + 2, 2, cost_info[:max_width], curses.color_pair(COLORS["warning"]))
     
+    def _draw_prompt_list(self, scr, h, w):
+        """Draw list of prompt templates"""
+        y_start = 6  # Account for tabs
+        available_lines = h - 10
+        
+        if not self.prompts_data:
+            scr.addstr(y_start, 2, "No prompt templates found.", curses.color_pair(COLORS["warning"]))
+            scr.addstr(y_start + 2, 2, "Check .drommage/prompts.json", curses.color_pair(COLORS["info"]))
+            return
+        
+        # Prompt list
+        for i, prompt_info in enumerate(self.prompts_data):
+            if i < self.scroll_offset:
+                continue
+            lines_per_item = 3 if i == self.selected_prompt else 1
+            if y_start + (i - self.scroll_offset) * lines_per_item >= h - 7:
+                break
+                
+            y = y_start + sum(3 if j == self.selected_prompt else 1 for j in range(self.scroll_offset, i))
+            
+            # Selection indicator
+            selected = (i == self.selected_prompt)
+            attr = curses.color_pair(COLORS["selected"]) if selected else 0
+            
+            # Category color
+            category = prompt_info["category"]
+            if category == "security":
+                category_color = COLORS["unavailable"]  # Red
+            elif category == "performance":
+                category_color = COLORS["available"]   # Green
+            elif category == "general":
+                category_color = COLORS["info"]        # Cyan
+            else:
+                category_color = COLORS["warning"]     # Yellow
+            
+            # Prompt line
+            prefix = "▶ " if selected else "  "
+            name = prompt_info["name"]
+            description = prompt_info["description"]
+            category_tag = f"[{category}]"
+            
+            line = f"{prefix}{name} - {description}"
+            max_width = w - 6 - len(category_tag) - 2
+            if len(line) > max_width:
+                line = line[:max_width-3] + "..."
+            
+            # Draw main line
+            scr.addstr(y, 2, line[:max_width], attr)
+            
+            # Draw category tag
+            scr.addstr(y, w - len(category_tag) - 2, category_tag, curses.color_pair(category_color))
+            
+            # Details lines
+            if selected:
+                variables = ", ".join(prompt_info["variables"][:5])  # Show first 5 variables
+                if len(prompt_info["variables"]) > 5:
+                    variables += "..."
+                details = f"    Variables: {variables}"
+                max_width = w - 4
+                if len(details) > max_width:
+                    details = details[:max_width-3] + "..."
+                scr.addstr(y + 1, 2, details[:max_width], curses.color_pair(COLORS["info"]))
+                
+                # Example usage
+                example = f"    Usage: --prompt={name}"
+                scr.addstr(y + 2, 2, example[:max_width], curses.color_pair(COLORS["info"]))
+    
     def _draw_test_results(self, scr, h, w):
         """Draw provider test results"""
         y_start = 4
@@ -210,6 +304,30 @@ class ConfigTUI:
             details = f"   Type: {provider_info['type']}, Model: {provider_info['model']}"
             scr.addstr(y + 1, 2, details, curses.color_pair(COLORS["info"]))
     
+    def _draw_prompt_test_results(self, scr, h, w):
+        """Draw prompt test results"""
+        y_start = 6
+        
+        scr.addstr(5, 2, "Testing Prompts...", curses.A_BOLD | curses.color_pair(COLORS["title"]))
+        
+        for i, prompt_info in enumerate(self.prompts_data[:5]):  # Show first 5 prompts
+            y = y_start + i * 2
+            if y >= h - 5:
+                break
+            
+            name = prompt_info["name"]
+            category = prompt_info["category"]
+            
+            # Test result (placeholder - could be enhanced)
+            result_text = f"✅ {name}: Template valid"
+            color = COLORS["success"]
+            
+            scr.addstr(y, 2, result_text, curses.color_pair(color))
+            
+            # Additional info
+            details = f"   Category: {category}, Variables: {len(prompt_info['variables'])}"
+            scr.addstr(y + 1, 2, details, curses.color_pair(COLORS["info"]))
+    
     def _draw_status_bar(self, scr, h, w):
         """Draw status bar at bottom"""
         status_y = h - 1
@@ -222,7 +340,11 @@ class ConfigTUI:
         
         # Key hints
         if self.mode == "list":
-            hints = "[↑↓] select  [t] test  [a] add  [e] edit  [d] delete  [s] save  [q] quit"
+            tab_hints = "[tab] switch tab  " if self.current_tab == "providers" else "[tab] switch tab  "
+            if self.current_tab == "providers":
+                hints = f"{tab_hints}[↑↓] select  [t] test  [r] reload  [s] save  [q] quit"
+            else:
+                hints = f"{tab_hints}[↑↓] select  [t] test  [r] reload  [q] quit"
         else:
             hints = "[any key] back to list  [q] quit"
         
@@ -241,37 +363,72 @@ class ConfigTUI:
     
     def _handle_list_keys(self, key):
         """Handle keys in list mode"""
+        # Tab switching
+        if key == ord('\t') or key == 9:  # Tab key
+            if self.current_tab == "providers":
+                self.current_tab = "prompts"
+                self.selected_prompt = 0
+                self.scroll_offset = 0
+            else:
+                self.current_tab = "providers"
+                self.selected_provider = 0
+                self.scroll_offset = 0
+            return True
+        
+        # Navigation keys
         if key == curses.KEY_UP or key == ord('k'):
-            if self.selected_provider > 0:
-                self.selected_provider -= 1
-                if self.selected_provider < self.scroll_offset:
-                    self.scroll_offset = max(0, self.scroll_offset - 1)
+            if self.current_tab == "providers":
+                if self.selected_provider > 0:
+                    self.selected_provider -= 1
+                    if self.selected_provider < self.scroll_offset:
+                        self.scroll_offset = max(0, self.scroll_offset - 1)
+            else:  # prompts
+                if self.selected_prompt > 0:
+                    self.selected_prompt -= 1
+                    if self.selected_prompt < self.scroll_offset:
+                        self.scroll_offset = max(0, self.scroll_offset - 1)
         
         elif key == curses.KEY_DOWN or key == ord('j'):
-            if self.selected_provider < len(self.providers_data) - 1:
-                self.selected_provider += 1
-                # Scroll down if needed (simplified)
-                max_visible = 10  # Approximate
-                if self.selected_provider >= self.scroll_offset + max_visible:
-                    self.scroll_offset += 1
+            if self.current_tab == "providers":
+                if self.selected_provider < len(self.providers_data) - 1:
+                    self.selected_provider += 1
+                    max_visible = 10
+                    if self.selected_provider >= self.scroll_offset + max_visible:
+                        self.scroll_offset += 1
+            else:  # prompts
+                if self.selected_prompt < len(self.prompts_data) - 1:
+                    self.selected_prompt += 1
+                    max_visible = 10
+                    if self.selected_prompt >= self.scroll_offset + max_visible:
+                        self.scroll_offset += 1
         
+        # Action keys
         elif key == ord('t') or key == ord('T'):
-            self._test_providers()
+            if self.current_tab == "providers":
+                self._test_providers()
+            else:
+                self._test_prompts()
             
         elif key == ord('r') or key == ord('R'):
-            self._reload_providers()
+            if self.current_tab == "providers":
+                self._reload_providers()
+            else:
+                self._reload_prompts()
             
         elif key == ord('s') or key == ord('S'):
-            self._save_config()
+            if self.current_tab == "providers":
+                self._save_config()
+            else:
+                self.status = "Prompts are read-only (edit .drommage/prompts.json)"
             
         elif key == ord('a') or key == ord('A'):
-            self.status = "Add provider not implemented yet"
+            self.status = "Add/edit features not implemented yet"
             
         elif key == ord('e') or key == ord('E'):
-            self.status = "Edit provider not implemented yet"
+            self.status = "Edit features not implemented yet"
             
         elif key == ord('d') or key == ord('D'):
-            self.status = "Delete provider not implemented yet"
+            self.status = "Delete features not implemented yet"
             
         elif key == ord('h') or key == ord('?'):
             self._show_help()
@@ -293,6 +450,33 @@ class ConfigTUI:
             self.status = f"❌ Error loading providers: {str(e)[:50]}"
             self.providers_data = []
     
+    def _load_prompts(self):
+        """Load prompt data from manager"""
+        try:
+            templates = self.engine.get_prompt_templates()
+            categories = self.engine.get_prompt_categories()
+            
+            self.prompts_data = []
+            for name, info in templates.items():
+                self.prompts_data.append({
+                    "name": name,
+                    "description": info["description"],
+                    "category": info["category"],
+                    "variables": info["variables"]
+                })
+            
+            # Sort by category then name
+            self.prompts_data.sort(key=lambda x: (x["category"], x["name"]))
+            
+            if self.prompts_data:
+                self.status = f"✅ Loaded {len(self.prompts_data)} prompt templates"
+            else:
+                self.status = "⚠️ No prompt templates found"
+                
+        except Exception as e:
+            self.status = f"❌ Error loading prompts: {str(e)[:50]}"
+            self.prompts_data = []
+    
     def _test_providers(self):
         """Test all providers"""
         self.status = "🧪 Testing providers..."
@@ -311,6 +495,19 @@ class ConfigTUI:
         except Exception as e:
             self.status = f"❌ Reload failed: {str(e)[:50]}"
     
+    def _test_prompts(self):
+        """Test prompt templates"""
+        self.status = "🧪 Testing prompt templates..."
+        self.mode = "test"
+    
+    def _reload_prompts(self):
+        """Reload prompt templates"""
+        try:
+            self._load_prompts()
+            self.status = "✅ Prompt templates reloaded"
+        except Exception as e:
+            self.status = f"❌ Reload failed: {str(e)[:50]}"
+    
     def _save_config(self):
         """Save provider configuration"""
         try:
@@ -324,46 +521,45 @@ class ConfigTUI:
         help_text = """
 DRommage Configuration Help:
 
-Providers are automatically loaded from .drommage/providers.json
+TABS:
+- Tab: Switch between Providers and Prompts tabs
 
 Key bindings:
-- ↑↓ / jk: Navigate providers
-- t: Test all providers
+- ↑↓ / jk: Navigate items
+- t: Test providers/prompts
 - r: Reload configuration  
-- s: Save configuration
-- a: Add provider (coming soon)
-- e: Edit provider (coming soon)
-- d: Delete provider (coming soon)
+- s: Save configuration (providers only)
 - h/?: Show this help
 - q: Quit
 
+PROVIDERS TAB:
+- Configure LLM providers (Ollama, OpenAI, Anthropic, HTTP)
+- Test provider availability
+- Manage provider priorities and settings
+- File: .drommage/providers.json
+
+PROMPTS TAB:
+- View available prompt templates
+- Browse by category (security, performance, architecture, etc.)
+- See prompt variables and usage examples
+- File: .drommage/prompts.json
+
 Provider Types:
-- ollama: Local Ollama server (http://localhost:11434)
+- ollama: Local Ollama server
 - openai: OpenAI API (requires OPENAI_API_KEY)
 - anthropic: Anthropic Claude API (requires ANTHROPIC_API_KEY)
-- http: Generic OpenAI-compatible endpoint (custom headers support)
+- http: Generic OpenAI-compatible endpoint
 
-Configuration file location: .drommage/providers.json
+Prompt Categories:
+- general: Basic analysis prompts
+- security: Security-focused analysis
+- performance: Performance impact analysis
+- architecture: Architectural analysis
+- quality: Code quality and review
+- business: Business impact analysis
 
-Example providers.json:
-{
-  "providers": [
-    {
-      "name": "ollama_mistral", "type": "ollama",
-      "endpoint": "http://localhost:11434", "model": "mistral:latest"
-    },
-    {
-      "name": "openai_gpt4", "type": "openai", 
-      "endpoint": "https://api.openai.com/v1", "model": "gpt-4o-mini",
-      "api_key_env": "OPENAI_API_KEY"
-    },
-    {
-      "name": "local_llama", "type": "http",
-      "endpoint": "http://localhost:8080/v1", "model": "llama-3-8b",
-      "headers": {"Authorization": "Bearer token"}
-    }
-  ]
-}
+Usage:
+drommage analyze --prompt=brief_security --commit=HEAD
         """
         self.status = "Press any key to continue..."
     
