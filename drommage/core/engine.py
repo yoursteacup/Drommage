@@ -11,6 +11,7 @@ from .analysis import AnalysisMode, AnalysisResult, ChangeType, CommitStats
 from .cache import AnalysisCache
 from .pattern_analyzer import PatternAnalyzer
 from .providers import ProviderManager
+from .prompts import PromptManager
 
 
 class DRommageEngine:
@@ -40,7 +41,8 @@ class DRommageEngine:
         # Initialize components
         self._cache = AnalysisCache(self.cache_dir)
         self._pattern_analyzer = PatternAnalyzer()
-        self._provider_manager = ProviderManager(self.cache_dir)
+        self._prompt_manager = PromptManager(self.cache_dir)
+        self._provider_manager = ProviderManager(self.cache_dir, self._prompt_manager)
         
         # State
         self._commits: List[GitCommit] = []
@@ -269,3 +271,34 @@ class DRommageEngine:
             return ChangeType.BUGFIX
             
         return ChangeType.UNKNOWN
+    
+    def get_commit_by_hash(self, commit_hash: str) -> Optional[GitCommit]:
+        """Get commit by hash"""
+        for commit in self._commits:
+            if commit.hash.startswith(commit_hash) or commit.hash == commit_hash:
+                return commit
+        return None
+    
+    # Prompt management methods
+    def get_prompt_info(self) -> Dict:
+        """Get information about loaded prompts"""
+        return self._prompt_manager.get_prompt_info()
+    
+    def get_prompt_templates(self) -> Dict:
+        """Get all prompt templates"""
+        return {name: {
+            "description": template.description,
+            "category": template.category,
+            "variables": template.variables
+        } for name, template in self._prompt_manager.get_all_templates().items()}
+    
+    def get_prompt_categories(self) -> List[str]:
+        """Get all prompt categories"""
+        return self._prompt_manager.get_categories()
+    
+    def render_custom_prompt(self, template_name: str, commit_hash: str, **kwargs) -> Optional[str]:
+        """Render a custom prompt template"""
+        commit = self.get_commit_by_hash(commit_hash)
+        if commit:
+            return self._prompt_manager.render_prompt(template_name, commit, **kwargs)
+        return None

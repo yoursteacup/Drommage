@@ -1,0 +1,60 @@
+{
+  "prompts": [
+    {
+      "name": "brief_security_focus",
+      "description": "Security analysis with focus on common vulnerabilities",
+      "category": "security",
+      "variables": ["commit_hash", "message", "files_changed", "insertions", "deletions"],
+      "template": "🔒 SECURITY ANALYSIS for commit {commit_hash}:\n\nCommit: {message}\nFiles: {files_changed} | Lines: +{insertions}/-{deletions}\n\nAnalyze for OWASP Top 10 vulnerabilities:\n- A01 Broken Access Control\n- A02 Cryptographic Failures  \n- A03 Injection\n- A04 Insecure Design\n- A05 Security Misconfiguration\n- A06 Vulnerable Components\n- A07 Authentication Failures\n- A08 Software Integrity Failures\n- A09 Security Logging Failures\n- A10 Server-Side Request Forgery\n\nProvide one-line security assessment with risk level (LOW/MEDIUM/HIGH)."
+    },
+    {
+      "name": "brief_performance_focus",
+      "description": "Performance analysis with focus on common bottlenecks",
+      "category": "performance",
+      "variables": ["commit_hash", "message", "files_changed", "insertions", "deletions"],
+      "template": "⚡ PERFORMANCE ANALYSIS for commit {commit_hash}:\n\nCommit: {message}\nFiles: {files_changed} | Lines: +{insertions}/-{deletions}\n\nAnalyze for performance impact:\n- Database query optimization\n- Algorithm complexity (O notation)\n- Memory allocation patterns\n- Network I/O efficiency\n- Caching strategies\n- Async/await usage\n- Loop optimizations\n- Resource cleanup\n\nProvide one-line performance assessment with impact level (POSITIVE/NEUTRAL/NEGATIVE)."
+    },
+    {
+      "name": "deep_architecture_review",
+      "description": "Comprehensive architectural analysis",
+      "category": "architecture", 
+      "variables": ["commit_hash", "message", "author", "date", "files_changed", "insertions", "deletions"],
+      "template": "🏗️ ARCHITECTURAL REVIEW for commit {commit_hash}:\n\nCommit: {message}\nAuthor: {author}\nDate: {date}\nFiles: {files_changed} | Lines: +{insertions}/-{deletions}\n\nArchitectural Analysis Framework:\n1. SOLID Principles compliance\n2. Design patterns usage/violations\n3. Dependency injection and inversion\n4. Separation of concerns\n5. API design consistency\n6. Data flow architecture\n7. Scalability implications\n8. Maintainability impact\n9. Technical debt introduction/reduction\n10. System boundaries and abstractions\n\nReturn JSON:\n{{\n  \"summary\": \"Architectural impact summary\",\n  \"details\": \"Detailed architectural analysis\",\n  \"risks\": [\"architectural risk 1\", \"architectural risk 2\"],\n  \"recommendations\": [\"improvement 1\", \"improvement 2\"],\n  \"solid_score\": \"1-10 SOLID principles adherence\",\n  \"patterns\": [\"pattern1 used\", \"pattern2 violated\"],\n  \"technical_debt\": \"INCREASED/DECREASED/NEUTRAL\"\n}}"
+    },
+    {
+      "name": "brief_frontend_focus",
+      "description": "Frontend-specific analysis",
+      "category": "frontend",
+      "variables": ["commit_hash", "message", "files_changed", "insertions", "deletions"],
+      "template": "🖥️ FRONTEND ANALYSIS for commit {commit_hash}:\n\nCommit: {message}\nFiles: {files_changed} | Lines: +{insertions}/-{deletions}\n\nFrontend-specific checks:\n- React/Vue/Angular best practices\n- CSS performance and maintainability\n- JavaScript bundle size impact\n- Accessibility (a11y) compliance\n- Mobile responsiveness\n- Browser compatibility\n- State management patterns\n- Component reusability\n- SEO implications\n- User experience impact\n\nProvide one-line frontend assessment with UX impact level (IMPROVED/NEUTRAL/DEGRADED)."
+    },
+    {
+      "name": "brief_backend_focus", 
+      "description": "Backend-specific analysis",
+      "category": "backend",
+      "variables": ["commit_hash", "message", "files_changed", "insertions", "deletions"],
+      "template": "🔧 BACKEND ANALYSIS for commit {commit_hash}:\n\nCommit: {message}\nFiles: {files_changed} | Lines: +{insertions}/-{deletions}\n\nBackend-specific checks:\n- API design and versioning\n- Database schema changes\n- Service scalability\n- Error handling and logging\n- Authentication/authorization\n- Data validation and sanitization\n- Caching strategies\n- Background job processing\n- Service dependencies\n- Infrastructure implications\n\nProvide one-line backend assessment with system impact level (POSITIVE/NEUTRAL/NEGATIVE)."
+    },
+    {
+      "name": "deep_security_pentest",
+      "description": "Penetration testing focused security analysis",
+      "category": "security",
+      "variables": ["commit_hash", "message", "author", "date", "files_changed", "insertions", "deletions"],
+      "template": "🕵️ PENETRATION TEST ANALYSIS for commit {commit_hash}:\n\nCommit: {message}\nAuthor: {author}\nDate: {date}\nFiles: {files_changed} | Lines: +{insertions}/-{deletions}\n\nPentest-focused security analysis:\n1. Authentication bypass opportunities\n2. Authorization privilege escalation\n3. Input validation bypass techniques\n4. SQL/NoSQL injection vectors\n5. XSS (stored, reflected, DOM-based)\n6. CSRF protection adequacy\n7. File upload vulnerabilities\n8. Business logic flaws\n9. Information disclosure risks\n10. Session management weaknesses\n\nReturn JSON:\n{{\n  \"summary\": \"Penetration test assessment\",\n  \"details\": \"Detailed security analysis from attacker perspective\",\n  \"risks\": [\"exploitable vulnerability 1\", \"exploitable vulnerability 2\"],\n  \"recommendations\": [\"security fix 1\", \"security fix 2\"],\n  \"exploit_difficulty\": \"TRIVIAL/EASY/MEDIUM/HARD\",\n  \"attack_vectors\": [\"vector1\", \"vector2\"],\n  \"cve_potential\": \"HIGH/MEDIUM/LOW likelihood of CVE\"\n}}"
+    },
+    {
+      "name": "brief_devops_focus",
+      "description": "DevOps and infrastructure analysis", 
+      "category": "devops",
+      "variables": ["commit_hash", "message", "files_changed", "insertions", "deletions"],
+      "template": "🚀 DEVOPS ANALYSIS for commit {commit_hash}:\n\nCommit: {message}\nFiles: {files_changed} | Lines: +{insertions}/-{deletions}\n\nDevOps-specific checks:\n- CI/CD pipeline impact\n- Deployment complexity changes\n- Environment configuration drift\n- Container/Docker implications\n- Infrastructure as Code changes\n- Monitoring and alerting needs\n- Scaling and resource requirements\n- Backup and disaster recovery\n- Security compliance (SOC2, GDPR)\n- Operational maintenance burden\n\nProvide one-line DevOps assessment with operational impact (SIMPLIFIED/NEUTRAL/COMPLEX)."
+    },
+    {
+      "name": "deep_business_value",
+      "description": "Business value and ROI analysis",
+      "category": "business",
+      "variables": ["commit_hash", "message", "author", "date", "files_changed", "insertions", "deletions"],
+      "template": "💼 BUSINESS VALUE ANALYSIS for commit {commit_hash}:\n\nCommit: {message}\nAuthor: {author}\nDate: {date}\nFiles: {files_changed} | Lines: +{insertions}/-{deletions}\n\nBusiness Impact Assessment:\n1. Customer value proposition\n2. Revenue generation potential\n3. Cost reduction opportunities\n4. Market competitive advantage\n5. User engagement improvements\n6. Operational efficiency gains\n7. Risk mitigation value\n8. Time-to-market impact\n9. Technical debt vs feature value\n10. Long-term strategic alignment\n\nReturn JSON:\n{{\n  \"summary\": \"Business value summary\",\n  \"details\": \"Detailed business impact analysis\",\n  \"risks\": [\"business risk 1\", \"business risk 2\"],\n  \"recommendations\": [\"business recommendation 1\", \"business recommendation 2\"],\n  \"roi_estimate\": \"HIGH/MEDIUM/LOW return on investment\",\n  \"customer_impact\": \"POSITIVE/NEUTRAL/NEGATIVE customer impact\",\n  \"strategic_value\": \"CRITICAL/IMPORTANT/NICE_TO_HAVE\"\n}}"
+    }
+  ]
+}

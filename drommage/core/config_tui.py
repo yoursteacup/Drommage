@@ -132,10 +132,11 @@ class ConfigTUI:
         for i, provider_info in enumerate(self.providers_data):
             if i < self.scroll_offset:
                 continue
-            if y_start + (i - self.scroll_offset) * 2 >= h - 5:
+            lines_per_item = 3 if i == self.selected_provider else 1
+            if y_start + (i - self.scroll_offset) * lines_per_item >= h - 5:
                 break
                 
-            y = y_start + (i - self.scroll_offset) * 2
+            y = y_start + sum(3 if j == self.selected_provider else 1 for j in range(self.scroll_offset, i))
             
             # Selection indicator
             selected = (i == self.selected_provider)
@@ -174,6 +175,12 @@ class ConfigTUI:
                 if len(details) > max_width:
                     details = details[:max_width-3] + "..."
                 scr.addstr(y + 1, 2, details[:max_width], curses.color_pair(COLORS["info"]))
+                
+                # Cost info line
+                if y + 2 < h - 5:
+                    cost_info = self._get_cost_display(provider_info)
+                    if cost_info and len(cost_info) <= max_width:
+                        scr.addstr(y + 2, 2, cost_info[:max_width], curses.color_pair(COLORS["warning"]))
     
     def _draw_test_results(self, scr, h, w):
         """Draw provider test results"""
@@ -324,16 +331,71 @@ Key bindings:
 - t: Test all providers
 - r: Reload configuration  
 - s: Save configuration
+- a: Add provider (coming soon)
+- e: Edit provider (coming soon)
+- d: Delete provider (coming soon)
 - h/?: Show this help
 - q: Quit
 
 Provider Types:
-- ollama: Local Ollama server (localhost:11434)
+- ollama: Local Ollama server (http://localhost:11434)
 - openai: OpenAI API (requires OPENAI_API_KEY)
+- anthropic: Anthropic Claude API (requires ANTHROPIC_API_KEY)
+- http: Generic OpenAI-compatible endpoint (custom headers support)
 
 Configuration file location: .drommage/providers.json
+
+Example providers.json:
+{
+  "providers": [
+    {
+      "name": "ollama_mistral", "type": "ollama",
+      "endpoint": "http://localhost:11434", "model": "mistral:latest"
+    },
+    {
+      "name": "openai_gpt4", "type": "openai", 
+      "endpoint": "https://api.openai.com/v1", "model": "gpt-4o-mini",
+      "api_key_env": "OPENAI_API_KEY"
+    },
+    {
+      "name": "local_llama", "type": "http",
+      "endpoint": "http://localhost:8080/v1", "model": "llama-3-8b",
+      "headers": {"Authorization": "Bearer token"}
+    }
+  ]
+}
         """
         self.status = "Press any key to continue..."
+    
+    def _get_cost_display(self, provider_info: Dict) -> str:
+        """Get cost display string for provider"""
+        provider_type = provider_info.get("type", "")
+        model = provider_info.get("model", "")
+        
+        if provider_type == "ollama":
+            return "    Cost: Free (local)"
+        elif provider_type == "openai":
+            if "gpt-4o-mini" in model:
+                return "    Cost: ~$0.0002/1k tokens"
+            elif "gpt-4o" in model:
+                return "    Cost: ~$0.0025/1k tokens" 
+            elif "gpt-4" in model:
+                return "    Cost: ~$0.03/1k tokens"
+            else:
+                return "    Cost: Varies by model"
+        elif provider_type == "anthropic":
+            if "haiku" in model:
+                return "    Cost: ~$0.00025/1k tokens"
+            elif "sonnet" in model:
+                return "    Cost: ~$0.003/1k tokens"
+            elif "opus" in model:
+                return "    Cost: ~$0.015/1k tokens"
+            else:
+                return "    Cost: Varies by model"
+        elif provider_type == "http":
+            return "    Cost: Depends on endpoint"
+        else:
+            return "    Cost: Unknown"
 
 
 def main(repo_path: str = "."):

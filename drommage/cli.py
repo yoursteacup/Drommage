@@ -14,7 +14,7 @@ def main():
     """Main CLI entry point"""
     # Check if first argument is a subcommand
     import sys
-    subcommands = {'config', 'cache', 'analyze'}
+    subcommands = {'config', 'cache', 'analyze', 'prompts'}
     
     # If no args or first arg is not a subcommand, treat as analysis
     if len(sys.argv) == 1 or (len(sys.argv) > 1 and sys.argv[1] not in subcommands):
@@ -42,6 +42,13 @@ def main():
     cache_parser.add_argument('--repo', default='.', help='Repository path')
     cache_parser.add_argument('--mode', choices=['pat', 'brief', 'deep'], help='Specific mode to clear')
     
+    # Prompts command
+    prompts_parser = subparsers.add_parser('prompts', help='Manage prompt templates')
+    prompts_parser.add_argument('action', choices=['list', 'show', 'categories'], help='Prompts action')
+    prompts_parser.add_argument('--name', help='Prompt template name (for show action)')
+    prompts_parser.add_argument('--category', help='Filter by category (for list action)')
+    prompts_parser.add_argument('--repo', default='.', help='Repository path')
+    
     args = parser.parse_args()
     
     # Handle subcommands
@@ -49,6 +56,8 @@ def main():
         return run_config_interface(args)
     elif args.command == 'cache':
         return run_cache_command(args)
+    elif args.command == 'prompts':
+        return run_prompts_command(args)
     elif args.command == 'analyze' or args.command is None:
         # Default behavior - analysis
         if args.command is None:
@@ -90,6 +99,22 @@ def _add_analysis_args(parser):
         choices=["pat", "brief", "deep"],
         default="pat",
         help="Analysis type (default: pat)"
+    )
+    
+    parser.add_argument(
+        "--prompt",
+        help="Use custom prompt template (e.g. 'brief_security', 'deep_code_review')"
+    )
+    
+    parser.add_argument(
+        "--custom-prompt",
+        help="Use custom prompt text directly"
+    )
+    
+    parser.add_argument(
+        "--list-prompts",
+        action="store_true",
+        help="List available prompt templates"
     )
     
     parser.add_argument(
@@ -268,6 +293,79 @@ def run_cache_command(args) -> int:
         
     except Exception as e:
         print(f"❌ Cache command failed: {e}")
+        return 1
+
+
+def run_prompts_command(args) -> int:
+    """Run prompts management command"""
+    try:
+        engine = DRommageEngine(args.repo)
+        
+        if args.action == "list":
+            templates = engine.get_prompt_templates()
+            categories = engine.get_prompt_categories()
+            
+            if args.category:
+                # Filter by category
+                if args.category not in categories:
+                    print(f"❌ Category '{args.category}' not found")
+                    print(f"Available categories: {', '.join(categories)}")
+                    return 1
+                
+                filtered_templates = {name: info for name, info in templates.items() 
+                                    if info['category'] == args.category}
+                print(f"📝 Prompt templates in category '{args.category}':")
+                for name, info in filtered_templates.items():
+                    print(f"   • {name}: {info['description']}")
+            else:
+                # List all templates by category
+                print("📝 Available prompt templates:")
+                for category in categories:
+                    print(f"\n  {category.upper()}:")
+                    cat_templates = {name: info for name, info in templates.items() 
+                                   if info['category'] == category}
+                    for name, info in cat_templates.items():
+                        print(f"    • {name}: {info['description']}")
+                        
+        elif args.action == "show":
+            if not args.name:
+                print("❌ --name required for show action")
+                return 1
+                
+            templates = engine.get_prompt_templates()
+            if args.name not in templates:
+                print(f"❌ Prompt template '{args.name}' not found")
+                print(f"Available templates: {', '.join(templates.keys())}")
+                return 1
+                
+            template_info = templates[args.name]
+            print(f"📝 Prompt template: {args.name}")
+            print(f"   Description: {template_info['description']}")
+            print(f"   Category: {template_info['category']}")
+            print(f"   Variables: {', '.join(template_info['variables'])}")
+            
+            # Show example rendering if we have commits
+            commits = engine.get_commits()
+            if commits:
+                example = engine.render_custom_prompt(args.name, commits[0].hash)
+                if example:
+                    print(f"\n   Example (latest commit):")
+                    print("   " + "\n   ".join(example.split('\n')[:10]))
+                    if len(example.split('\n')) > 10:
+                        print("   ... (truncated)")
+                        
+        elif args.action == "categories":
+            categories = engine.get_prompt_categories()
+            print("📂 Available prompt categories:")
+            for category in categories:
+                count = len([t for t in engine.get_prompt_templates().values() 
+                           if t['category'] == category])
+                print(f"   • {category} ({count} templates)")
+                
+        return 0
+        
+    except Exception as e:
+        print(f"❌ Prompts command failed: {e}")
         return 1
 
 
