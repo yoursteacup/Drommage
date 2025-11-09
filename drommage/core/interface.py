@@ -1353,7 +1353,8 @@ class DocTUIView:
         if self.mode == "view":
             help_items = [
                 ("↑↓", "navigate"),
-                ("D", "analyze/toggle"),
+                ("D", "toggle mode"),
+                ("SPACE", "analyze"),
                 ("Q", "quit"),
                 ("qe", "flip pages"),
                 ("rf", "scroll analysis"),
@@ -1369,7 +1370,8 @@ class DocTUIView:
         elif self.mode == "llm_detail":
             help_items = [
                 ("↑↓", "navigate"),
-                ("D", "analyze/toggle"),
+                ("D", "toggle mode"),
+                ("SPACE", "analyze"),
                 ("Q", "quit"),
                 ("qe", "flip pages"),
                 ("rf", "scroll analysis"),
@@ -1414,8 +1416,10 @@ class DocTUIView:
                 self.analysis_scroll = 0  # Reset analysis scroll
                 self._load_analyses_from_engine()
             elif ch in (ord('d'), ord('D')):
-                # Smart D button logic
+                # Smart D button logic - toggle mode
                 self._handle_d_button()
+            elif ch == ord(' '):  # Spacebar - trigger analysis
+                self._handle_spacebar()
             elif ch == ord('Q'):
                 return False  # Quit
             elif ch in (ord('r'), ord('R')):
@@ -1473,8 +1477,10 @@ class DocTUIView:
                 self.analysis_scroll = 0  # Reset analysis scroll
                 self._load_analyses_from_engine()
             elif ch in (ord('d'), ord('D')):
-                # Smart D button logic
+                # Smart D button logic - toggle mode
                 self._handle_d_button()
+            elif ch == ord(' '):  # Spacebar - trigger analysis
+                self._handle_spacebar()
             elif ch == ord('Q'):
                 return False  # Quit
             elif ch == ord('q'):  # Quick page up
@@ -1762,21 +1768,34 @@ class DocTUIView:
         # This ALWAYS works, even during analysis
         if self.analysis_mode == AnalysisMode.PAT:
             self.analysis_mode = AnalysisMode.BRIEF
-            self.status = "📝 Switched to BRIEF analysis"
+            self.status = "📝 Switched to BRIEF analysis (press SPACE to start)"
         elif self.analysis_mode == AnalysisMode.BRIEF:
             self.analysis_mode = AnalysisMode.DEEP
-            self.status = "📊 Switched to DEEP analysis"
+            self.status = "📊 Switched to DEEP analysis (press SPACE to start)"
         else:  # DEEP
             self.analysis_mode = AnalysisMode.PAT
-            self.status = "🔍 Switched to PAT analysis"
+            self.status = "🔍 Switched to PAT analysis (press SPACE to start)"
         
-        # Start analysis for current mode if not available yet
+        # Check if analysis already available for this mode
         current_commit = self.commits[self.selected_commit_idx]
-        if current_commit.hash not in self.current_analyses[self.analysis_mode]:
-            self._queue_analysis(self.analysis_mode)
-        else:
-            # Analysis already available - just show it
+        if current_commit.hash in self.current_analyses[self.analysis_mode]:
             self.status = f"✅ {self.analysis_mode.value.title()} analysis ready"
+    
+    def _handle_spacebar(self):
+        """Trigger analysis for current mode"""
+        if self.selected_commit_idx < 0 or self.selected_commit_idx >= len(self.commits):
+            self.status = "❌ No commit selected"
+            return
+        
+        current_commit = self.commits[self.selected_commit_idx]
+        
+        # Check if analysis already exists
+        if current_commit.hash in self.current_analyses[self.analysis_mode]:
+            self.status = f"📦 {self.analysis_mode.value.title()} analysis already available"
+            return
+        
+        # Start analysis
+        self._queue_analysis(self.analysis_mode)
     
     def _word_wrap(self, text: str, width: int) -> list:
         """Simple word wrap for text display"""
