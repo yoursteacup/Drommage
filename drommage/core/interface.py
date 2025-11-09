@@ -373,47 +373,46 @@ class DocTUIView:
             brief_status = "completed" if commit.hash in self.current_analyses[AnalysisMode.BRIEF] else None
             deep_status = "completed" if commit.hash in self.current_analyses[AnalysisMode.DEEP] else None
             
-            # Check if current commit is being analyzed
-            is_current = (actual_idx == self.selected_commit_idx)
-            if is_current and self.status and "🔄" in self.status:
-                if self.analysis_mode == AnalysisMode.PAT:
-                    pat_status = "running"
-                elif self.analysis_mode == AnalysisMode.BRIEF:
-                    brief_status = "running" 
-                elif self.analysis_mode == AnalysisMode.DEEP:
-                    deep_status = "running"
+            # Check if any analysis is running for this commit (always visible)
+            for mode in [AnalysisMode.PAT, AnalysisMode.BRIEF, AnalysisMode.DEEP]:
+                analysis_key = (commit.hash, mode)
+                if analysis_key in self.running_analyses:
+                    if mode == AnalysisMode.PAT:
+                        pat_status = "running"
+                    elif mode == AnalysisMode.BRIEF:
+                        brief_status = "running"
+                    elif mode == AnalysisMode.DEEP:
+                        deep_status = "running"
             
-            # Show PAT/BRIEF/DEEP indicators with current mode highlighted
-            pat_indicator = ""
-            brief_indicator = ""
-            deep_indicator = ""
+            # Build compact indicator showing only completed + running analyses
+            compact_indicators = []
             
-            # Show indicators for current commit
-            if actual_idx == self.selected_commit_idx:
-                # Show current mode prominently
-                if self.analysis_mode == AnalysisMode.PAT:
-                    pat_indicator = self._get_status_indicator(pat_status, "P")
-                    brief_indicator = " b "
-                    deep_indicator = " d "
-                elif self.analysis_mode == AnalysisMode.BRIEF:
-                    pat_indicator = " p "
-                    brief_indicator = self._get_status_indicator(brief_status, "B")
-                    deep_indicator = " d "
-                else:  # DEEP
-                    pat_indicator = " p "
-                    brief_indicator = " b "
-                    deep_indicator = self._get_status_indicator(deep_status, "D")
+            # Check each analysis type and add to compact display
+            # Use simple animation for better compatibility
+            spinner_chars = ["◐", "◓", "◑", "◒"]
+            spinner_idx = (self.animation_frame // 3) % len(spinner_chars)
+            spinner = spinner_chars[spinner_idx]
+            
+            if pat_status == "running":
+                compact_indicators.append(f"p{spinner}")  # Running indicator
+            elif pat_status == "completed":
+                compact_indicators.append("p")   # Completed
+                
+            if brief_status == "running":
+                compact_indicators.append(f"b{spinner}")  # Running indicator  
+            elif brief_status == "completed":
+                compact_indicators.append("b")   # Completed
+                
+            if deep_status == "running":
+                compact_indicators.append(f"d{spinner}")  # Running indicator
+            elif deep_status == "completed":
+                compact_indicators.append("d")   # Completed
+            
+            # Format as [p|b|d] or [p◐|b|d] etc
+            if compact_indicators:
+                indicators = "[" + "|".join(compact_indicators) + "]"
             else:
-                # For non-selected commits, show status if available
-                if pat_status:
-                    pat_indicator = self._get_status_indicator(pat_status, "p")
-                if brief_status:
-                    brief_indicator = self._get_status_indicator(brief_status, "b")
-                if deep_status:
-                    deep_indicator = self._get_status_indicator(deep_status, "d")
-            
-            # Combine indicators
-            indicators = pat_indicator + brief_indicator + deep_indicator
+                indicators = ""
             
             # Calculate how much space we need for indicators
             indicator_space = len(indicators) + 1 if indicators else 0
