@@ -100,7 +100,7 @@ cp example_custom_prompts.json .drommage/prompts.json
 ### **Интерактивный анализ**
 ```bash
 drommage
-# ↑↓ - навигация, D - смена режима, SPACE - анализ, Q - выход
+# ↑↓ - навигация, SPACE - смена режима, D - анализ, Q - выход
 ```
 
 ### **Security audit**

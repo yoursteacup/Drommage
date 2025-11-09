@@ -63,20 +63,24 @@ python drommage.py
 ### Keyboard Controls
 | Key | Action |
 |-----|--------|
-| `↑↓` | Navigate versions |
-| `B` | Brief analysis (quick summary) |
-| `D` | Deep analysis (detailed with risks/recommendations) |
-| `R` | Region details (see specific text regions) |
-| `PgUp/Dn` | Scroll document |
-| `ESC` | Go back |
+| `↑↓` | Navigate commits |
+| `SPACE` | Toggle analysis mode (PAT → BRIEF → DEEP) |
+| `D` | Run analysis for current mode |
+| `Q/E` | Flip through pages |
+| `R/F` | Scroll analysis results |
+| `←→` | Scroll diff view |
+| `H` | Help |
 | `Q` | Quit |
 
-### Analysis Levels
+### Analysis Modes
 
-#### 📝 **Brief Analysis** (`B`)
-Quick one-line summary of changes - perfect for scanning through versions.
+#### 🔍 **PAT Analysis** (Pattern)
+Quick pattern-based analysis without LLM - works offline, shows file types and basic metrics.
 
-#### 🔍 **Deep Analysis** (`D`)
+#### 📝 **BRIEF Analysis** (AI-powered)
+Quick AI summary of changes - perfect for scanning through commits.
+
+#### 🔬 **DEEP Analysis** (AI-powered)
 Comprehensive analysis including:
 - Change type classification (feature/fix/docs/etc.)
 - Impact assessment

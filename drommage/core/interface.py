@@ -567,7 +567,7 @@ class DocTUIView:
             return
         else:
             # No analysis yet - show instructions
-            scr.addstr(y, x, "Press SPACE to analyze", curses.color_pair(PALETTE["dim"]))
+            scr.addstr(y, x, "Press D to analyze", curses.color_pair(PALETTE["dim"]))
             y += 1
             scr.addstr(y, x, "or use arrow keys to navigate", curses.color_pair(PALETTE["dim"]))
             return
@@ -1363,8 +1363,8 @@ class DocTUIView:
         if self.mode == "view":
             help_items = [
                 ("↑↓", "navigate"),
-                ("D", "toggle mode"),
-                ("SPACE", "analyze"),
+                ("SPACE", "toggle mode"),
+                ("D", "analyze"),
                 ("Q", "quit"),
                 ("qe", "flip pages"),
                 ("rf", "scroll analysis"),
@@ -1380,8 +1380,8 @@ class DocTUIView:
         elif self.mode == "llm_detail":
             help_items = [
                 ("↑↓", "navigate"),
-                ("D", "toggle mode"),
-                ("SPACE", "analyze"),
+                ("SPACE", "toggle mode"),
+                ("D", "analyze"),
                 ("Q", "quit"),
                 ("qe", "flip pages"),
                 ("rf", "scroll analysis"),
@@ -1426,10 +1426,10 @@ class DocTUIView:
                 self.analysis_scroll = 0  # Reset analysis scroll
                 self._load_analyses_from_engine()
             elif ch in (ord('d'), ord('D')):
-                # Smart D button logic - toggle mode
-                self._handle_d_button()
-            elif ch == ord(' '):  # Spacebar - trigger analysis
+                # D button - trigger analysis
                 self._handle_spacebar()
+            elif ch == ord(' '):  # Spacebar - toggle mode
+                self._handle_d_button()
             elif ch == ord('Q'):
                 return False  # Quit
             elif ch in (ord('r'), ord('R')):
@@ -1487,10 +1487,10 @@ class DocTUIView:
                 self.analysis_scroll = 0  # Reset analysis scroll
                 self._load_analyses_from_engine()
             elif ch in (ord('d'), ord('D')):
-                # Smart D button logic - toggle mode
-                self._handle_d_button()
-            elif ch == ord(' '):  # Spacebar - trigger analysis
+                # D button - trigger analysis
                 self._handle_spacebar()
+            elif ch == ord(' '):  # Spacebar - toggle mode
+                self._handle_d_button()
             elif ch == ord('Q'):
                 return False  # Quit
             elif ch == ord('q'):  # Quick page up
@@ -1842,7 +1842,7 @@ class DocTUIView:
             pass  # Ignore queue processing errors
     
     def _handle_d_button(self):
-        """Toggle analysis mode: PAT → BRIEF → DEEP → PAT (always available)"""
+        """Toggle analysis mode: PAT → BRIEF → DEEP → PAT (now triggered by SPACE)"""
         if self.selected_commit_idx < 0 or self.selected_commit_idx >= len(self.commits):
             return
         
@@ -1850,13 +1850,13 @@ class DocTUIView:
         # This ALWAYS works, even during analysis
         if self.analysis_mode == AnalysisMode.PAT:
             self.analysis_mode = AnalysisMode.BRIEF
-            self.status = "📝 Switched to BRIEF analysis (press SPACE to start)"
+            self.status = "📝 Switched to BRIEF analysis (press D to start)"
         elif self.analysis_mode == AnalysisMode.BRIEF:
             self.analysis_mode = AnalysisMode.DEEP
-            self.status = "📊 Switched to DEEP analysis (press SPACE to start)"
+            self.status = "📊 Switched to DEEP analysis (press D to start)"
         else:  # DEEP
             self.analysis_mode = AnalysisMode.PAT
-            self.status = "🔍 Switched to PAT analysis (press SPACE to start)"
+            self.status = "🔍 Switched to PAT analysis (press D to start)"
         
         # Check if analysis already available for this mode
         current_commit = self.commits[self.selected_commit_idx]
@@ -1864,7 +1864,7 @@ class DocTUIView:
             self.status = f"✅ {self.analysis_mode.value.title()} analysis ready"
     
     def _handle_spacebar(self):
-        """Trigger analysis for current mode"""
+        """Trigger analysis for current mode (now triggered by D)"""
         if self.selected_commit_idx < 0 or self.selected_commit_idx >= len(self.commits):
             self.status = "❌ No commit selected"
             return
@@ -1979,15 +1979,21 @@ class DocTUIView:
         
         # Get current analysis to check content length
         current_analysis = None
-        analysis_type = "deep" if self.mode == "llm_detail" else "brief"
-        current_analysis = self.current_analyses.get(analysis_type)
+        current_commit = self.commits[self.selected_commit_idx] if (
+            self.selected_commit_idx >= 0 and 
+            self.selected_commit_idx < len(self.commits)
+        ) else None
         
-        # Try to get ANY available analysis if preferred one is not available
-        if not current_analysis:
-            if analysis_type == "deep":
-                current_analysis = self.current_analyses.get("brief")
+        if current_commit:
+            # Get analysis for current mode
+            if current_commit.hash in self.current_analyses[self.analysis_mode]:
+                current_analysis = self.current_analyses[self.analysis_mode][current_commit.hash]
             else:
-                current_analysis = self.current_analyses.get("deep")
+                # Try to get ANY available analysis if current mode is not available
+                for mode in [AnalysisMode.DEEP, AnalysisMode.BRIEF, AnalysisMode.PAT]:
+                    if current_commit.hash in self.current_analyses[mode]:
+                        current_analysis = self.current_analyses[mode][current_commit.hash]
+                        break
         
         if current_analysis:
             # Calculate total content lines to prevent over-scrolling
@@ -1998,9 +2004,50 @@ class DocTUIView:
                 panel_width = left_width - 3
             else:
                 panel_width = 40
-            max_scroll = self._get_max_scroll_for_analysis(current_analysis, panel_height, panel_width)
+            # Get the actual content lines that are being displayed
+            all_content_lines = self._get_analysis_content_lines(current_analysis, panel_width)
+            max_scroll = max(0, len(all_content_lines) - (panel_height - 2))
             self.analysis_scroll = min(max_scroll, self.analysis_scroll + scroll_amount)
     
+    def _get_analysis_content_lines(self, analysis, panel_width):
+        """Get all content lines for analysis (exactly as displayed)"""
+        if not analysis:
+            return []
+            
+        all_lines = []
+        
+        # Summary
+        if hasattr(analysis, 'summary') and analysis.summary:
+            summary_lines = self._word_wrap(analysis.summary, panel_width - 2)
+            all_lines.extend(summary_lines)
+        else:
+            all_lines.append("No summary available")
+        
+        # Details
+        if hasattr(analysis, 'details') and analysis.details:
+            all_lines.append("")  # Empty line
+            all_lines.append("Details:")
+            detail_lines = self._word_wrap(analysis.details, panel_width - 2)
+            all_lines.extend(detail_lines)
+        
+        # Risks
+        if hasattr(analysis, 'risks') and analysis.risks:
+            all_lines.append("")  # Empty line
+            all_lines.append("Risks:")
+            for risk in analysis.risks:
+                risk_lines = self._word_wrap(f"• {risk}", panel_width - 2)
+                all_lines.extend(risk_lines)
+        
+        # Recommendations
+        if hasattr(analysis, 'recommendations') and analysis.recommendations:
+            all_lines.append("")  # Empty line
+            all_lines.append("Recommendations:")
+            for rec in analysis.recommendations:
+                rec_lines = self._word_wrap(f"• {rec}", panel_width - 2)
+                all_lines.extend(rec_lines)
+        
+        return all_lines
+
     def _get_max_scroll_for_analysis(self, analysis, panel_height, panel_width=40):
         """Calculate maximum scroll position to prevent scrolling past content"""
         if not analysis:

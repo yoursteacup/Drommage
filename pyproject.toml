@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "drommage"
-version = "1.0.0"
+version = "1.0.2"
 description = "AI-powered git commit analysis tool for developers and teams"
-authors = [{name = "DRommage Contributors", email = "drommage@example.com"}]
+authors = [{name = "Zhaxybayev Daulet", email = "damelimm@gmail.com"}]
 license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.8"
@@ -34,10 +34,10 @@ dev = ["pytest", "flake8", "mypy"]
 drommage = "drommage.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/yoursteacup/drommage"
-Repository = "https://github.com/yoursteacup/drommage"
-Documentation = "https://github.com/yoursteacup/drommage#readme"
-Issues = "https://github.com/yoursteacup/drommage/issues"
+Homepage = "https://github.com/yoursteacup/DRommage"
+Repository = "https://github.com/yoursteacup/DRommage"
+Documentation = "https://github.com/yoursteacup/DRommage#readme"
+Issues = "https://github.com/yoursteacup/DRommage/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
