@@ -1,0 +1,23 @@
+{
+  "providers": [
+    {
+      "name": "ollama_mistral",
+      "type": "ollama",
+      "endpoint": "http://localhost:11434",
+      "model": "mistral:latest",
+      "priority": 1,
+      "enabled": true,
+      "timeout": 30
+    },
+    {
+      "name": "openai_gpt4",
+      "type": "openai",
+      "endpoint": "https://api.openai.com/v1",
+      "model": "gpt-4o-mini",
+      "priority": 2,
+      "api_key_env": "OPENAI_API_KEY",
+      "enabled": false,
+      "timeout": 30
+    }
+  ]
+}

@@ -190,6 +190,7 @@ class DRommageEngine:
                     "name": p.config.name,
                     "type": p.config.type,
                     "model": p.config.model,
+                    "endpoint": p.config.endpoint,
                     "available": p.is_available(),
                     "priority": p.config.priority
                 }

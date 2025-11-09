@@ -16,6 +16,48 @@ def main():
         description="DRommage - Git commit analysis with LLM-powered insights"
     )
     
+    # Add subcommands
+    subparsers = parser.add_subparsers(dest='command', help='Available commands')
+    
+    # Main analysis command (default)
+    analyze_parser = subparsers.add_parser('analyze', help='Analyze commits (default)')
+    _add_analysis_args(analyze_parser)
+    
+    # Config command
+    config_parser = subparsers.add_parser('config', help='Configure LLM providers')
+    config_parser.add_argument('--repo', default='.', help='Repository path')
+    
+    # Cache command  
+    cache_parser = subparsers.add_parser('cache', help='Manage analysis cache')
+    cache_parser.add_argument('action', choices=['clear', 'stats', 'cleanup'], help='Cache action')
+    cache_parser.add_argument('--repo', default='.', help='Repository path')
+    cache_parser.add_argument('--mode', choices=['pat', 'brief', 'deep'], help='Specific mode to clear')
+    
+    args = parser.parse_args()
+    
+    # Handle subcommands
+    if args.command == 'config':
+        return run_config_interface(args)
+    elif args.command == 'cache':
+        return run_cache_command(args)
+    elif args.command == 'analyze' or args.command is None:
+        # Default behavior - analysis
+        if args.command is None:
+            # No subcommand - parse as analysis with original args
+            parser = argparse.ArgumentParser()
+            _add_analysis_args(parser)
+            args = parser.parse_args()
+            return run_analysis_command(args)
+        else:
+            return run_analysis_command(args)
+    else:
+        parser.print_help()
+        return 1
+
+
+def _add_analysis_args(parser):
+    """Add analysis arguments to parser"""
+    
     parser.add_argument(
         "--repo", 
         default=".",
@@ -53,9 +95,10 @@ def main():
         default="text",
         help="Output format for CLI mode (default: text)"
     )
-    
-    args = parser.parse_args()
-    
+
+
+def run_analysis_command(args) -> int:
+    """Run analysis command"""
     # Create engine
     try:
         engine = DRommageEngine(args.repo)
@@ -159,6 +202,54 @@ def run_cli_interface(engine: DRommageEngine, args) -> int:
             print(f"{i+1:2}. {commit.hash[:8]} - {summary}")
     
     return 0
+
+
+def run_config_interface(args) -> int:
+    """Run configuration interface"""
+    try:
+        from .core.config_tui import ConfigTUI
+        
+        print("🔧 Launching configuration interface...\n")
+        config_tui = ConfigTUI(args.repo)
+        config_tui.run()
+        
+        return 0
+    except Exception as e:
+        print(f"❌ Configuration interface failed: {e}")
+        return 1
+
+
+def run_cache_command(args) -> int:
+    """Run cache management command"""
+    try:
+        engine = DRommageEngine(args.repo)
+        
+        if args.action == "clear":
+            # Map CLI mode to AnalysisMode if specified
+            mode = None
+            if args.mode:
+                mode_mapping = {"pat": "pattern", "brief": "brief", "deep": "deep"}
+                mode = AnalysisMode(mode_mapping[args.mode])
+            
+            cleared = engine.clear_cache(mode=mode)
+            print(f"🧹 Cleared {cleared} cache entries")
+            
+        elif args.action == "stats":
+            stats = engine.get_cache_stats()
+            print(f"📊 Cache statistics:")
+            print(f"   Total entries: {stats.get('total_entries', 0)}")
+            print(f"   Database size: {stats.get('db_size', 'unknown')}")
+            print(f"   Cache location: {stats.get('cache_path', 'unknown')}")
+            
+        elif args.action == "cleanup":
+            cleaned = engine.cleanup_cache()
+            print(f"🗑️  Cleaned up {cleaned} old cache versions")
+            
+        return 0
+        
+    except Exception as e:
+        print(f"❌ Cache command failed: {e}")
+        return 1
 
 
 def print_analysis_result(result, format_type: str = "text"):
