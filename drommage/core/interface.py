@@ -4,7 +4,7 @@ Improved visuals with Unicode box drawing and better color scheme
 """
 
 import curses
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pathlib import Path
 from .diff_tracker import GitDiffEngine
 from .region_analyzer import RegionIndex
@@ -16,6 +16,8 @@ from .analysis import AnalysisMode, AnalysisResult
 import uuid
 import time
 import subprocess
+import threading
+import queue
 
 # Enhanced color palette
 PALETTE = {
@@ -86,8 +88,10 @@ class DocTUIView:
             AnalysisMode.DEEP: {}    # {commit_hash: AnalysisResult}
         }
         
-        # Remove old task tracking - engine handles this
-        # self.active_tasks = []  # ❌ REMOVED
+        # Async analysis system
+        self.running_analyses = {}  # {(commit_hash, mode): thread}
+        self.analysis_queue = queue.Queue()
+        self.shutdown_flag = threading.Event()
         
         self.animation_frame = 0  # For animated indicators
         self.page_flip_animation = {"active": False, "start_time": 0, "direction": ""}  # Page flip animation
@@ -173,6 +177,9 @@ class DocTUIView:
         
         while True:
             try:
+                # Process analysis results from background threads
+                self._process_analysis_queue()
+                
                 # Update animation frame for visual feedback
                 self.animation_frame = (self.animation_frame + 1) % 100
                 
@@ -522,8 +529,9 @@ class DocTUIView:
         if current_commit.hash in self.current_analyses[self.analysis_mode]:
             current_analysis = self.current_analyses[self.analysis_mode][current_commit.hash]
         
-        # Check if analysis is in progress (status contains processing indicators)
-        is_analyzing = self.status and "🔄" in self.status
+        # Check if analysis is in progress for current commit and mode
+        analysis_key = (current_commit.hash, self.analysis_mode)
+        is_analyzing = analysis_key in self.running_analyses
         
         if current_analysis:
             # Show completed analysis using AnalysisResult format
@@ -1732,32 +1740,91 @@ class DocTUIView:
                     self.current_analyses[mode][current_commit.hash] = cached_result
     
     def _queue_analysis(self, mode: AnalysisMode):
-        """Queue analysis task for current commit using DRommageEngine"""
+        """Queue analysis task for current commit using DRommageEngine (async)"""
         if self.selected_commit_idx < 0 or self.selected_commit_idx >= len(self.commits):
             self.status = "❌ No commit selected"
             return
         
         current_commit = self.commits[self.selected_commit_idx]
+        analysis_key = (current_commit.hash, mode)
         
         # Check if analysis already exists in our cache
         if current_commit.hash in self.current_analyses[mode]:
             self.status = f"📦 {mode.value.title()} analysis already available"
             return
-        
-        # Use DRommageEngine for analysis
-        try:
-            self.status = f"🔄 Running {mode.value} analysis..."
-            result = self.drommage_engine.analyze_commit(current_commit.hash, mode)
             
-            if result:
-                # Store result in local cache for UI
-                self.current_analyses[mode][current_commit.hash] = result
-                self.status = f"✅ {mode.value.title()} analysis complete"
-            else:
-                self.status = f"❌ {mode.value.title()} analysis failed"
-                
+        # Check if analysis is already running
+        if analysis_key in self.running_analyses:
+            self.status = f"🔄 {mode.value.title()} analysis already running..."
+            return
+        
+        # Start async analysis
+        self.status = f"🔄 Starting {mode.value} analysis..."
+        thread = threading.Thread(
+            target=self._run_analysis_async,
+            args=(current_commit.hash, mode),
+            daemon=True
+        )
+        self.running_analyses[analysis_key] = thread
+        thread.start()
+    
+    def _run_analysis_async(self, commit_hash: str, mode: AnalysisMode):
+        """Run analysis in background thread"""
+        try:
+            result = self.drommage_engine.analyze_commit(commit_hash, mode)
+            
+            # Put result in queue for main thread to handle
+            self.analysis_queue.put({
+                'type': 'analysis_complete',
+                'commit_hash': commit_hash,
+                'mode': mode,
+                'result': result
+            })
+            
         except Exception as e:
-            self.status = f"❌ Analysis error: {str(e)[:50]}"
+            # Put error in queue for main thread to handle
+            self.analysis_queue.put({
+                'type': 'analysis_error',
+                'commit_hash': commit_hash,
+                'mode': mode,
+                'error': str(e)
+            })
+        finally:
+            # Remove from running analyses
+            analysis_key = (commit_hash, mode)
+            if analysis_key in self.running_analyses:
+                del self.running_analyses[analysis_key]
+    
+    def _process_analysis_queue(self):
+        """Process completed analysis results from background threads"""
+        try:
+            while True:
+                try:
+                    # Non-blocking get from queue
+                    message = self.analysis_queue.get_nowait()
+                    
+                    if message['type'] == 'analysis_complete':
+                        commit_hash = message['commit_hash']
+                        mode = message['mode']
+                        result = message['result']
+                        
+                        if result:
+                            # Store result in local cache for UI
+                            self.current_analyses[mode][commit_hash] = result
+                            self.status = f"✅ {mode.value.title()} analysis complete"
+                        else:
+                            self.status = f"❌ {mode.value.title()} analysis failed"
+                            
+                    elif message['type'] == 'analysis_error':
+                        mode = message['mode']
+                        error = message['error']
+                        self.status = f"❌ {mode.value.title()} error: {error[:50]}"
+                        
+                except queue.Empty:
+                    break  # No more messages
+                    
+        except Exception:
+            pass  # Ignore queue processing errors
     
     def _handle_d_button(self):
         """Toggle analysis mode: PAT → BRIEF → DEEP → PAT (always available)"""
