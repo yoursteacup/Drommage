@@ -5,7 +5,7 @@ Git integration - analyze real commit diffs instead of mock documents
 import subprocess
 import re
 from typing import List, Dict, Optional, Tuple
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 @dataclass
@@ -19,6 +19,10 @@ class GitCommit:
     files_changed: int
     insertions: int
     deletions: int
+    changed_files: List[str] = field(default_factory=list)  # List of changed file paths
+    added_files: List[str] = field(default_factory=list)    # Added files
+    modified_files: List[str] = field(default_factory=list) # Modified files  
+    deleted_files: List[str] = field(default_factory=list)  # Deleted files
 
 @dataclass 
 class GitDiff:
