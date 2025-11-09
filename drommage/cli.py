@@ -12,6 +12,15 @@ from .core.analysis import AnalysisMode
 
 def main():
     """Main CLI entry point"""
+    # Check if first argument is a subcommand
+    import sys
+    subcommands = {'config', 'cache', 'analyze'}
+    
+    # If no args or first arg is not a subcommand, treat as analysis
+    if len(sys.argv) == 1 or (len(sys.argv) > 1 and sys.argv[1] not in subcommands):
+        return run_legacy_analysis()
+    
+    # Parse with subcommands
     parser = argparse.ArgumentParser(
         description="DRommage - Git commit analysis with LLM-powered insights"
     )
@@ -132,6 +141,16 @@ def run_analysis_command(args) -> int:
         return run_cli_interface(engine, args)
     
     return 0
+
+
+def run_legacy_analysis() -> int:
+    """Run analysis with legacy argument parsing (no subcommand)"""
+    parser = argparse.ArgumentParser(
+        description="DRommage - Git commit analysis with LLM-powered insights"
+    )
+    _add_analysis_args(parser)
+    args = parser.parse_args()
+    return run_analysis_command(args)
 
 
 def run_tui_interface(engine: DRommageEngine) -> int:

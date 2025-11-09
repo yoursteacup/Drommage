@@ -557,7 +557,7 @@ class DocTUIView:
             return
         else:
             # No analysis yet - show instructions
-            scr.addstr(y, x, "Press 'd' to start analysis", curses.color_pair(PALETTE["dim"]))
+            scr.addstr(y, x, "Press SPACE to analyze", curses.color_pair(PALETTE["dim"]))
             y += 1
             scr.addstr(y, x, "or use arrow keys to navigate", curses.color_pair(PALETTE["dim"]))
             return
@@ -1176,7 +1176,7 @@ class DocTUIView:
                 y += 2
                 
                 tips = [
-                    "- Press D on any commit to start AI analysis",
+                    "- Press SPACE on any commit to start analysis",
                     "- Analysis runs in background, indicated by animations",
                     "- Use copy functions (i/o/p) to share insights with team",
                     "- Navigate quickly with q/e for large repositories",
@@ -1255,7 +1255,7 @@ class DocTUIView:
                 "• Real-time scroll position indicators",
                 "",
                 "🎯 USAGE TIPS",
-                "• Press D on any commit to start AI analysis",
+                "• Press SPACE on any commit to start analysis",
                 "• Analysis runs in background, indicated by animations",
                 "• Use copy functions (i/o/p) to share insights with team",
                 "• Navigate quickly with q/e for large repositories",
